@@ -125,7 +125,7 @@ let camStream=null,camRun=false,h5=null,wake=null;
 async function getWake(){try{if(navigator.wakeLock&&!wake){wake=await navigator.wakeLock.request('screen');wake.addEventListener('release',()=>wake=null)}}catch(e){}}
 function releaseWake(){try{wake&&wake.release()}catch(e){}wake=null}
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&S.tab==='scan'&&S.sess)getWake()});
-function viewScan(){const m=$('#mn');if(!S.sess){m.innerHTML=noSess();$('#ns').onclick=newSess;return}
+function viewScan(){stopCam();const m=$('#mn');if(!S.sess){m.innerHTML=noSess();$('#ns').onclick=newSess;return}
  getWake();
  m.innerHTML=`<div id="sy"></div><div class="muted" style="margin-bottom:6px">الجلسة: ${esc(S.sess.name)} ${S.list?'· القائمة: '+esc(S.list.name)+' ('+S.list.rows.length+' صنف)':'· بدون قائمة'}</div>
  <div class="card"><div class="hero"><b id="big">0</b><span>إجمالي القطع المعدودة</span></div><div class="stats" id="stats"></div></div>
@@ -139,11 +139,11 @@ function viewScan(){const m=$('#mn');if(!S.sess){m.innerHTML=noSess();$('#ns').o
  wi.onblur=()=>setTimeout(focus,150);m.addEventListener('click',e=>{if(!e.target.closest('button'))focus()});focus();
  $('#kb').onclick=()=>{wi.inputMode=wi.inputMode==='none'?'text':'none';wi.blur();wi.focus()};
  $('#un').onclick=undo;$('#sd').onclick=e=>{S.settings.sound=!S.settings.sound;kvSet('settings',S.settings);e.target.textContent=S.settings.sound?'🔊':'🔇';ac();sndOk()};
- $('#cm').onclick=()=>camRun?stopCam():startCam()}
-let camTrack=null,camCaps={};
-function stopCam(){camRun=false;camTrack=null;if(camStream){camStream.getTracks().forEach(t=>t.stop());camStream=null}if(h5){try{h5.stop().then(()=>h5.clear()).catch(()=>{})}catch(e){}h5=null}const c=$('#cam');if(c){c.classList.add('hide');c.querySelectorAll('video,#h5r,#camctl').forEach(x=>x.remove())}const b=$('#cm');if(b)b.textContent='📷 كاميرا'}
+ $('#cm').onclick=()=>{if(camRun)stopCam();else startCam()}}
+let camTrack=null,camCaps={},camGen=0;
+function stopCam(){camGen++;camRun=false;camTrack=null;if(camStream){camStream.getTracks().forEach(t=>t.stop());camStream=null}if(h5){try{h5.stop().then(()=>h5.clear()).catch(()=>{})}catch(e){}h5=null}const c=$('#cam');if(c){c.classList.add('hide');c.querySelectorAll('video,#h5r,#camctl').forEach(x=>x.remove())}const b=$('#cm');if(b)b.textContent='📷 كاميرا'}
 async function applyAdv(o){if(!camTrack)return false;try{await camTrack.applyConstraints({advanced:[o]});return true}catch(e){return false}}
-async function startCam(){const c=$('#cam');c.classList.remove('hide');camRun=true;$('#cm').textContent='⏹ إيقاف الكاميرا';ac();
+async function startCam(){if(camRun)return;const gen=++camGen;const dead=()=>gen!==camGen||!camRun;const c=$('#cam');if(!c)return;c.querySelectorAll('video,#h5r,#camctl').forEach(x=>x.remove());c.classList.remove('hide');camRun=true;$('#cm').textContent='⏹ إيقاف الكاميرا';ac();
  const FM=['code_128','code_39','ean_13','ean_8','upc_a','upc_e','itf','codabar','code_93','qr_code'];
  try{
   let det=null;
@@ -152,13 +152,13 @@ async function startCam(){const c=$('#cam');c.classList.remove('hide');camRun=tr
    const base={facingMode:{ideal:'environment'},frameRate:{ideal:30}};
    const R4={width:{ideal:3840},height:{ideal:2160}},R1={width:{ideal:1920},height:{ideal:1080}};for(const res of [...(S.settings.cam4k?[R4]:[]),R1,{width:{ideal:1280},height:{ideal:720}},{}]){
     try{camStream=await navigator.mediaDevices.getUserMedia({video:Object.assign({},base,res),audio:false});break}catch(e){camStream=null}}
-   if(!camStream)throw new Error('no camera');
+   if(dead()){if(camStream){camStream.getTracks().forEach(t=>t.stop());camStream=null}return}if(!camStream)throw new Error('no camera');
    camTrack=camStream.getVideoTracks()[0];camCaps=(camTrack.getCapabilities&&camTrack.getCapabilities())||{};
    const has=(k,v)=>camCaps[k]&&(Array.isArray(camCaps[k])?camCaps[k].includes(v):true);
    if(has('focusMode','continuous'))await applyAdv({focusMode:'continuous'});
    if(has('exposureMode','continuous'))await applyAdv({exposureMode:'continuous'});
    if(has('whiteBalanceMode','continuous'))await applyAdv({whiteBalanceMode:'continuous'});
-   const v=document.createElement('video');v.setAttribute('playsinline','');v.muted=true;v.srcObject=camStream;c.prepend(v);await v.play();
+   const v=document.createElement('video');v.setAttribute('playsinline','');v.muted=true;v.srcObject=camStream;c.prepend(v);await v.play();if(dead()){try{camStream&&camStream.getTracks().forEach(t=>t.stop())}catch(e){}camStream=null;v.remove();return}c.querySelectorAll('video').forEach(x=>{if(x!==v)x.remove()});
    const ctl=document.createElement('div');ctl.id='camctl';ctl.style.cssText='position:absolute;left:0;right:0;bottom:0;display:flex;gap:8px;align-items:center;padding:8px;background:#000a;z-index:3';
    let h='<span id="cres" style="font-size:12px;color:#cbd5e1;direction:ltr"></span>';
    if(camCaps.zoom&&camCaps.zoom.max>camCaps.zoom.min)h+=`<input id="czoom" type="range" min="${camCaps.zoom.min}" max="${camCaps.zoom.max}" step="${camCaps.zoom.step||0.1}" value="${(camTrack.getSettings().zoom)||camCaps.zoom.min}" style="flex:1;padding:0">`;
@@ -170,14 +170,14 @@ async function startCam(){const c=$('#cam');c.classList.remove('hide');camRun=tr
    let tor=false;const tb=$('#ctorch');if(tb)tb.onclick=async()=>{tor=!tor;await applyAdv({torch:tor});tb.style.background=tor?'#f59e0b':''};
    v.addEventListener('click',async()=>{if(has('focusMode','single-shot')){await applyAdv({focusMode:'single-shot'});setTimeout(()=>applyAdv({focusMode:has('focusMode','continuous')?'continuous':'single-shot'}),1200)}});
    let busy=false;const pick=r=>{if(r.length===1)return r[0];const cx=v.videoWidth/2,cy=v.videoHeight/2;let b=r[0],bd=1e18;for(const x of r){const bb=x.boundingBox;const d=bb?Math.hypot(bb.x+bb.width/2-cx,bb.y+bb.height/2-cy):0;if(d<bd){bd=d;b=x}}return b};
-   const tick=()=>{if(!camRun)return;if(!busy&&v.readyState>=2){busy=true;det.detect(v).then(r=>{if(r.length){const x=pick(r);doScan(x.rawValue,'cam')}}).catch(()=>{}).finally(()=>{busy=false})}
+   const tick=()=>{if(dead())return;if(!busy&&v.readyState>=2){busy=true;det.detect(v).then(r=>{if(r.length){const x=pick(r);doScan(x.rawValue,'cam')}}).catch(()=>{}).finally(()=>{busy=false})}
     if(v.requestVideoFrameCallback)v.requestVideoFrameCallback(tick);else requestAnimationFrame(tick)};
    tick();
   }else{
-   const d=document.createElement('div');d.id='h5r';c.prepend(d);
+   if(dead())return;const d=document.createElement('div');d.id='h5r';c.prepend(d);
    const F=window.Html5QrcodeSupportedFormats;const fmts=F?[F.CODE_128,F.CODE_39,F.EAN_13,F.EAN_8,F.UPC_A,F.UPC_E,F.ITF,F.CODABAR,F.CODE_93,F.QR_CODE].filter(x=>x!==undefined):undefined;
    h5=new Html5Qrcode('h5r',{verbose:false,formatsToSupport:fmts,useBarCodeDetectorIfSupported:true});
-   await h5.start({facingMode:'environment'},{fps:25,disableFlip:true,qrbox:(w,hh)=>({width:Math.floor(w*0.9),height:Math.floor(hh*0.6)}),videoConstraints:{facingMode:'environment',width:{ideal:1920},height:{ideal:1080},focusMode:'continuous',frameRate:{ideal:30}}},t=>doScan(t,'cam'),()=>{});
+   await h5.start({facingMode:'environment'},{fps:25,disableFlip:true,qrbox:(w,hh)=>({width:Math.floor(w*0.9),height:Math.floor(hh*0.6)}),videoConstraints:{facingMode:'environment',width:{ideal:1920},height:{ideal:1080},focusMode:'continuous',frameRate:{ideal:30}}},t=>doScan(t,'cam'),()=>{});if(dead()){try{await h5.stop();h5.clear()}catch(e){}h5=null}
   }
  }catch(e){stopCam();$('#last').className='bad';$('#last').innerHTML='<div class="nm">تعذر تشغيل الكاميرا</div><div class="muted">اسمح للتطبيق بالكاميرا من إعدادات المتصفح (الموقع > الأذونات).</div>'}}
 /* review view */
@@ -214,7 +214,7 @@ function viewData(){const m=$('#mn');
  $('#fi').onchange=e=>e.target.files[0]&&loadFile(e.target.files[0]);
  $('#ex').onclick=()=>exportXlsx(false);$('#sh').onclick=()=>exportXlsx(true);
  $('#bk').onclick=backup;$('#rs').onclick=()=>$('#rf').click();$('#rf').onchange=e=>e.target.files[0]&&restore(e.target.files[0]);
- const sv=()=>{S.settings.sound=$('#s1').checked;S.settings.vib=$('#s2').checked;S.settings.cooldown=Math.max(300,+$('#s3').value||700);kvSet('settings',S.settings)};$('#s4').onchange=()=>{S.settings.cam4k=$('#s4').checked;kvSet('settings',S.settings)};['s1','s2','s3'].forEach(i=>$('#'+i).onchange=sv);
+ const sv=()=>{S.settings.sound=$('#s1').checked;S.settings.vib=$('#s2').checked;S.settings.cooldown=Math.max(300,+$('#s3').value||700);kvSet('settings',S.settings)};$('#s4').onchange=()=>{stopCam();S.settings.cam4k=$('#s4').checked;kvSet('settings',S.settings)};['s1','s2','s3'].forEach(i=>$('#'+i).onchange=sv);
  $('#dbt').onclick=async()=>{let u=$('#dbu').value.trim().replace(/\/+$/,'');S.settings.dbUrl=u;kvSet('settings',S.settings);const m=$('#dbm');m.textContent='جاري الاختبار…';try{const k=genCode();const r=await fetch(u+'/s/_t'+k+'/x.json',{method:'PUT',body:'1'});if(!r.ok)throw r.status;await fetch(u+'/s/_t'+k+'.json',{method:'DELETE'});m.textContent='✔ الاتصال شغال';m.style.color='#86efac'}catch(e){m.textContent='✘ فشل الاتصال ('+e+'). تحقق من الرابط وقواعد الأمان.';m.style.color='#fca5a5'}};
  $('#st').onclick=()=>{ac();sndOk();setTimeout(sndBad,500)};
  $('#cs').onclick=()=>{if(confirm('تصفير كل العدّ في هذه الجلسة؟')){CNT=new Map();LOG=[];recompute();saveSess(true);viewData()}};
