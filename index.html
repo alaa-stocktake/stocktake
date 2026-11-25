@@ -34,7 +34,7 @@ label{display:block;color:var(--mu);font-size:13px}label select,label input{marg
 .it{display:flex;gap:10px;align-items:center;padding:11px 0;border-bottom:1px solid var(--line)}.it:last-child{border:0}.it .m{flex:1;min-width:0}.it .m b{display:block;word-break:break-word}.it small{color:var(--mu);direction:ltr;display:block;text-align:right}
 .tag{padding:3px 10px;border-radius:99px;font-size:13px;font-weight:700;display:inline-block;min-width:54px;text-align:center}.t-ok{background:#14532d;color:#bbf7d0}.t-ex{background:#7f1d1d;color:#fecaca}.t-mi{background:#78350f;color:#fde68a}
 .muted{color:var(--mu);font-size:13px}.hide{display:none!important}
-#cam{position:relative;background:#000;border-radius:16px;overflow:hidden;margin-bottom:10px}#cam video{width:100%;max-height:46vh;object-fit:cover;display:block}
+#cam{position:relative;background:#000;border-radius:16px;overflow:hidden;margin-bottom:10px}#cam video{width:100%;max-height:58vh;min-height:40vh;object-fit:cover;display:block}
 #cam .line{position:absolute;left:8%;right:8%;top:50%;height:2px;background:var(--bad);box-shadow:0 0 10px var(--bad);z-index:2}
 .modal{position:fixed;inset:0;background:#000a;display:flex;align-items:center;justify-content:center;z-index:20;padding:16px}.modal>div{background:var(--card);border-radius:14px;padding:16px;width:100%;max-width:420px}
 .err{color:#fca5a5;font-size:14px;margin-top:6px}
@@ -140,21 +140,46 @@ function viewScan(){const m=$('#mn');if(!S.sess){m.innerHTML=noSess();$('#ns').o
  $('#kb').onclick=()=>{wi.inputMode=wi.inputMode==='none'?'text':'none';wi.blur();wi.focus()};
  $('#un').onclick=undo;$('#sd').onclick=e=>{S.settings.sound=!S.settings.sound;kvSet('settings',S.settings);e.target.textContent=S.settings.sound?'🔊':'🔇';ac();sndOk()};
  $('#cm').onclick=()=>camRun?stopCam():startCam()}
-function stopCam(){camRun=false;if(camStream){camStream.getTracks().forEach(t=>t.stop());camStream=null}if(h5){try{h5.stop().then(()=>h5.clear()).catch(()=>{})}catch(e){}h5=null}const c=$('#cam');if(c){c.classList.add('hide');c.querySelectorAll('video,#h5r').forEach(x=>x.remove())}const b=$('#cm');if(b)b.textContent='📷 كاميرا'}
+let camTrack=null,camCaps={};
+function stopCam(){camRun=false;camTrack=null;if(camStream){camStream.getTracks().forEach(t=>t.stop());camStream=null}if(h5){try{h5.stop().then(()=>h5.clear()).catch(()=>{})}catch(e){}h5=null}const c=$('#cam');if(c){c.classList.add('hide');c.querySelectorAll('video,#h5r,#camctl').forEach(x=>x.remove())}const b=$('#cm');if(b)b.textContent='📷 كاميرا'}
+async function applyAdv(o){if(!camTrack)return false;try{await camTrack.applyConstraints({advanced:[o]});return true}catch(e){return false}}
 async function startCam(){const c=$('#cam');c.classList.remove('hide');camRun=true;$('#cm').textContent='⏹ إيقاف الكاميرا';ac();
- const FM=['ean_13','ean_8','upc_a','upc_e','code_128','code_39','code_93','itf','codabar','qr_code'];
+ const FM=['code_128','code_39','ean_13','ean_8','upc_a','upc_e','itf','codabar','code_93','qr_code'];
  try{
-  if('BarcodeDetector' in window){
-   let fm=FM;try{const sup=await BarcodeDetector.getSupportedFormats();fm=FM.filter(f=>sup.includes(f))}catch(e){}
-   const det=new BarcodeDetector({formats:fm});
-   camStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}},audio:false});
-   const v=document.createElement('video');v.setAttribute('playsinline','');v.muted=true;v.srcObject=camStream;c.prepend(v);await v.play();try{const tr=camStream.getVideoTracks()[0];const cp=tr.getCapabilities?tr.getCapabilities():{};if(cp.focusMode&&cp.focusMode.includes('continuous'))tr.applyConstraints({advanced:[{focusMode:'continuous'}]})}catch(e){}
-   let busy=false;const loop=async()=>{if(!camRun)return;if(!busy&&v.readyState>=2){busy=true;try{const r=await det.detect(v);if(r.length)doScan(r[0].rawValue,'cam')}catch(e){}busy=false}setTimeout(loop,0)};loop();
+  let det=null;
+  if('BarcodeDetector' in window){try{let fm=FM;try{const sup=await BarcodeDetector.getSupportedFormats();fm=FM.filter(f=>sup.includes(f))}catch(e){}if(fm.length)det=new BarcodeDetector({formats:fm})}catch(e){det=null}}
+  if(det){
+   const base={facingMode:{ideal:'environment'},frameRate:{ideal:30}};
+   const R4={width:{ideal:3840},height:{ideal:2160}},R1={width:{ideal:1920},height:{ideal:1080}};for(const res of [...(S.settings.cam4k?[R4]:[]),R1,{width:{ideal:1280},height:{ideal:720}},{}]){
+    try{camStream=await navigator.mediaDevices.getUserMedia({video:Object.assign({},base,res),audio:false});break}catch(e){camStream=null}}
+   if(!camStream)throw new Error('no camera');
+   camTrack=camStream.getVideoTracks()[0];camCaps=(camTrack.getCapabilities&&camTrack.getCapabilities())||{};
+   const has=(k,v)=>camCaps[k]&&(Array.isArray(camCaps[k])?camCaps[k].includes(v):true);
+   if(has('focusMode','continuous'))await applyAdv({focusMode:'continuous'});
+   if(has('exposureMode','continuous'))await applyAdv({exposureMode:'continuous'});
+   if(has('whiteBalanceMode','continuous'))await applyAdv({whiteBalanceMode:'continuous'});
+   const v=document.createElement('video');v.setAttribute('playsinline','');v.muted=true;v.srcObject=camStream;c.prepend(v);await v.play();
+   const ctl=document.createElement('div');ctl.id='camctl';ctl.style.cssText='position:absolute;left:0;right:0;bottom:0;display:flex;gap:8px;align-items:center;padding:8px;background:#000a;z-index:3';
+   let h='<span id="cres" style="font-size:12px;color:#cbd5e1;direction:ltr"></span>';
+   if(camCaps.zoom&&camCaps.zoom.max>camCaps.zoom.min)h+=`<input id="czoom" type="range" min="${camCaps.zoom.min}" max="${camCaps.zoom.max}" step="${camCaps.zoom.step||0.1}" value="${(camTrack.getSettings().zoom)||camCaps.zoom.min}" style="flex:1;padding:0">`;
+   else h+='<span style="flex:1"></span>';
+   if(camCaps.torch)h+='<button class="btn sm g" id="ctorch" style="min-height:34px">🔦</button>';
+   ctl.innerHTML=h;c.appendChild(ctl);
+   const rs=()=>{const e=$('#cres');if(e)e.textContent=v.videoWidth+'×'+v.videoHeight};rs();setTimeout(rs,800);
+   const z=$('#czoom');if(z)z.oninput=()=>applyAdv({zoom:parseFloat(z.value)});
+   let tor=false;const tb=$('#ctorch');if(tb)tb.onclick=async()=>{tor=!tor;await applyAdv({torch:tor});tb.style.background=tor?'#f59e0b':''};
+   v.addEventListener('click',async()=>{if(has('focusMode','single-shot')){await applyAdv({focusMode:'single-shot'});setTimeout(()=>applyAdv({focusMode:has('focusMode','continuous')?'continuous':'single-shot'}),1200)}});
+   let busy=false;const pick=r=>{if(r.length===1)return r[0];const cx=v.videoWidth/2,cy=v.videoHeight/2;let b=r[0],bd=1e18;for(const x of r){const bb=x.boundingBox;const d=bb?Math.hypot(bb.x+bb.width/2-cx,bb.y+bb.height/2-cy):0;if(d<bd){bd=d;b=x}}return b};
+   const tick=()=>{if(!camRun)return;if(!busy&&v.readyState>=2){busy=true;det.detect(v).then(r=>{if(r.length){const x=pick(r);doScan(x.rawValue,'cam')}}).catch(()=>{}).finally(()=>{busy=false})}
+    if(v.requestVideoFrameCallback)v.requestVideoFrameCallback(tick);else requestAnimationFrame(tick)};
+   tick();
   }else{
-   const d=document.createElement('div');d.id='h5r';c.prepend(d);h5=new Html5Qrcode('h5r',{verbose:false});
-   await h5.start({facingMode:'environment'},{fps:30,disableFlip:true,experimentalFeatures:{useBarCodeDetectorIfSupported:true},qrbox:(w,h)=>({width:Math.floor(w*0.85),height:Math.floor(h*0.5)})},t=>doScan(t,'cam'),()=>{});
+   const d=document.createElement('div');d.id='h5r';c.prepend(d);
+   const F=window.Html5QrcodeSupportedFormats;const fmts=F?[F.CODE_128,F.CODE_39,F.EAN_13,F.EAN_8,F.UPC_A,F.UPC_E,F.ITF,F.CODABAR,F.CODE_93,F.QR_CODE].filter(x=>x!==undefined):undefined;
+   h5=new Html5Qrcode('h5r',{verbose:false,formatsToSupport:fmts,useBarCodeDetectorIfSupported:true});
+   await h5.start({facingMode:'environment'},{fps:25,disableFlip:true,qrbox:(w,hh)=>({width:Math.floor(w*0.9),height:Math.floor(hh*0.6)}),videoConstraints:{facingMode:'environment',width:{ideal:1920},height:{ideal:1080},focusMode:'continuous',frameRate:{ideal:30}}},t=>doScan(t,'cam'),()=>{});
   }
- }catch(e){stopCam();$('#last').className='bad';$('#last').innerHTML='<div class="nm">تعذر تشغيل الكاميرا</div><div class="muted">اسمح للتطبيق بالكاميرا. على بعض المتصفحات لازم الصفحة تكون https أو ملف محلي.</div>'}}
+ }catch(e){stopCam();$('#last').className='bad';$('#last').innerHTML='<div class="nm">تعذر تشغيل الكاميرا</div><div class="muted">اسمح للتطبيق بالكاميرا من إعدادات المتصفح (الموقع > الأذونات).</div>'}}
 /* review view */
 let filt='all',q='',lim=100,rvT=null;
 function renderReviewSoon(){clearTimeout(rvT);rvT=setTimeout(renderReviewList,250)}
@@ -182,14 +207,14 @@ function viewData(){const m=$('#mn');
  <div class="card"><h3>1ب) رموز الألوان (اختياري)</h3><div class="muted">${S.legend?Object.keys(S.legend).length+' لون محفوظ':'ملف فيه عمودين: رمز اللون، اسم اللون (بالإنجليزي مثل القائمة). أو ورقة اسمها «رموز الألوان» داخل ملف القائمة.'}</div><br><input type="file" id="lf" accept=".xlsx,.xls,.csv"></div>
  <div class="card"><h3>2) تصدير التسوية</h3><div class="muted">Excel فيه: ملخص، مطابق، زيادة (موجب)، نقص (سالب)، الكل${S.sess?'':' · افتح جلسة أولاً'}</div><br><div class="row"><button class="btn ok" id="ex" ${S.sess?'':'disabled'}>⬇ تصدير Excel</button><button class="btn g" id="sh" ${S.sess?'':'disabled'}>مشاركة</button></div><div id="exm" class="muted"></div></div>
  <div class="card"><h3>3) نسخة احتياطية</h3><div class="row"><button class="btn g" id="bk">حفظ نسخة</button><button class="btn g" id="rs">استرجاع</button></div><input type="file" id="rf" accept=".json" class="hide"></div>
- <div class="card"><h3>4) الإعدادات</h3><label class="row"><span>صوت</span><input type="checkbox" id="s1" ${S.settings.sound?'checked':''} style="width:24px;flex:none"></label><br><label class="row"><span>اهتزاز</span><input type="checkbox" id="s2" ${S.settings.vib?'checked':''} style="width:24px;flex:none"></label><br><label>الكاميرا: مدة غياب الباركود عن الشاشة قبل ما ينعد مرة ثانية (مللي ثانية)<input type="number" id="s3" value="${S.settings.cooldown}"></label><br><button class="btn g" id="st">اختبار الأصوات</button></div>
+ <div class="card"><h3>4) الإعدادات</h3><label class="row"><span>صوت</span><input type="checkbox" id="s1" ${S.settings.sound?'checked':''} style="width:24px;flex:none"></label><br><label class="row"><span>اهتزاز</span><input type="checkbox" id="s2" ${S.settings.vib?'checked':''} style="width:24px;flex:none"></label><br><label>الكاميرا: مدة غياب الباركود عن الشاشة قبل ما ينعد مرة ثانية (مللي ثانية)<input type="number" id="s3" value="${S.settings.cooldown}"></label><br><label class="row"><span>كاميرا 4K (أوضح للباركود الصغير، أبطأ)</span><input type="checkbox" id="s4" ${S.settings.cam4k?'checked':''} style="width:24px;flex:none"></label><br><button class="btn g" id="st">اختبار الأصوات</button></div>
  <div class="card"><h3>المزامنة المباشرة</h3><div class="muted">رابط قاعدة بيانات Firebase (مرة وحدة). مثال: https://اسم-المشروع-default-rtdb.firebaseio.com</div><br><input id="dbu" dir="ltr" placeholder="https://....firebaseio.com" value="${esc(S.settings.dbUrl)}"><br><br><button class="btn g" id="dbt">حفظ واختبار الاتصال</button><div id="dbm" class="muted"></div></div>
  <div class="card"><h3>5) مسح</h3><div class="row"><button class="btn r" id="cs" ${S.sess?'':'disabled'}>تصفير عدّ الجلسة</button><button class="btn r" id="cl">حذف القائمة</button></div></div>`;
  $('#lf').onchange=async e=>{const f=e.target.files[0];if(!f)return;const wb=XLSX.read(await f.arrayBuffer(),{type:'array',raw:true});const n=readLegend(XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,raw:true,defval:''}));alert(n?'تم حفظ '+n+' لون':'ما لقيت رموز');viewData()};
  $('#fi').onchange=e=>e.target.files[0]&&loadFile(e.target.files[0]);
  $('#ex').onclick=()=>exportXlsx(false);$('#sh').onclick=()=>exportXlsx(true);
  $('#bk').onclick=backup;$('#rs').onclick=()=>$('#rf').click();$('#rf').onchange=e=>e.target.files[0]&&restore(e.target.files[0]);
- const sv=()=>{S.settings.sound=$('#s1').checked;S.settings.vib=$('#s2').checked;S.settings.cooldown=Math.max(300,+$('#s3').value||700);kvSet('settings',S.settings)};['s1','s2','s3'].forEach(i=>$('#'+i).onchange=sv);
+ const sv=()=>{S.settings.sound=$('#s1').checked;S.settings.vib=$('#s2').checked;S.settings.cooldown=Math.max(300,+$('#s3').value||700);kvSet('settings',S.settings)};$('#s4').onchange=()=>{S.settings.cam4k=$('#s4').checked;kvSet('settings',S.settings)};['s1','s2','s3'].forEach(i=>$('#'+i).onchange=sv);
  $('#dbt').onclick=async()=>{let u=$('#dbu').value.trim().replace(/\/+$/,'');S.settings.dbUrl=u;kvSet('settings',S.settings);const m=$('#dbm');m.textContent='جاري الاختبار…';try{const k=genCode();const r=await fetch(u+'/s/_t'+k+'/x.json',{method:'PUT',body:'1'});if(!r.ok)throw r.status;await fetch(u+'/s/_t'+k+'.json',{method:'DELETE'});m.textContent='✔ الاتصال شغال';m.style.color='#86efac'}catch(e){m.textContent='✘ فشل الاتصال ('+e+'). تحقق من الرابط وقواعد الأمان.';m.style.color='#fca5a5'}};
  $('#st').onclick=()=>{ac();sndOk();setTimeout(sndBad,500)};
  $('#cs').onclick=()=>{if(confirm('تصفير كل العدّ في هذه الجلسة؟')){CNT=new Map();LOG=[];recompute();saveSess(true);viewData()}};
