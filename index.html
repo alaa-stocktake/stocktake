@@ -135,11 +135,12 @@ function viewScan(){stopCam();const m=$('#mn');if(!S.sess){m.innerHTML=noSess();
  <div id="last"><div class="muted">جاهز للمسح</div></div>`;
  updStats();setSt();const wi=$('#wi');
  wi.onkeydown=e=>{if(e.key==='Enter'||e.key==='Tab'){e.preventDefault();const v=wi.value;wi.value='';if(v)doScan(v,'kb')}};
- const focus=()=>{if(S.tab==='scan'&&!document.querySelector('.modal')&&document.activeElement!==wi&&wi.inputMode==='none')wi.focus({preventScroll:true})};
+ const focus=()=>{if(S.tab==='scan'&&!document.querySelector('.modal')&&document.activeElement!==wi&&wi.getAttribute('inputmode')==='none')wi.focus({preventScroll:true})};
  wi.onblur=()=>setTimeout(focus,150);m.addEventListener('click',e=>{if(!e.target.closest('button'))focus()});focus();
- $('#kb').onclick=()=>{wi.inputMode=wi.inputMode==='none'?'text':'none';wi.blur();wi.focus()};
+ const setKb=on=>{wi.setAttribute('inputmode',on?'text':'none');wi.setAttribute('enterkeyhint','done');$('#kb').classList.toggle('on',on);$('#kb').style.outline=on?'2px solid var(--pri)':'';wi.placeholder=on?'اكتب الباركود ثم Enter':'امسح بالماسح أو اكتب الباركود ثم Enter';wi.blur();wi.focus({preventScroll:true});setTimeout(()=>{wi.blur();wi.focus({preventScroll:true});try{wi.click()}catch(e){}},60)};
+$('#kb').onclick=()=>setKb(wi.getAttribute('inputmode')==='none');
  $('#un').onclick=undo;$('#sd').onclick=e=>{S.settings.sound=!S.settings.sound;kvSet('settings',S.settings);e.target.textContent=S.settings.sound?'🔊':'🔇';ac();sndOk()};
- $('#cm').onclick=()=>{if(camRun)stopCam();else startCam()}}
+ $('#cm').onclick=()=>{if(wi.getAttribute('inputmode')!=='none'){wi.setAttribute('inputmode','none');$('#kb').style.outline='';wi.blur()}if(camRun)stopCam();else startCam()}}
 let camTrack=null,camCaps={},camGen=0;
 function stopCam(){camGen++;camRun=false;camTrack=null;if(camStream){camStream.getTracks().forEach(t=>t.stop());camStream=null}if(h5){try{h5.stop().then(()=>h5.clear()).catch(()=>{})}catch(e){}h5=null}const c=$('#cam');if(c){c.classList.add('hide');c.querySelectorAll('video,#h5r,#camctl').forEach(x=>x.remove())}const b=$('#cm');if(b)b.textContent='📷 كاميرا'}
 async function applyAdv(o){if(!camTrack)return false;try{await camTrack.applyConstraints({advanced:[o]});return true}catch(e){return false}}
