@@ -115,16 +115,16 @@ function loginHTML(){const hasU=S.users.length>0;
  <div class="card"><h3>دخول إلى جلسة مشتركة</h3><div class="muted">إذا المدير أنشأ لك حساب: الصق رابط الدعوة (أو رمز الجلسة) واكتب اسمك والرقم السري اللي أعطاك إياهم.</div><br><input id="ji" dir="ltr" placeholder="رابط الدعوة أو رمز الجلسة" value="${esc(S.invite||'')}" autocomplete="off"><br><br><input id="jn2" placeholder="الاسم" autocomplete="off"><br><br><input id="jp" type="password" inputmode="numeric" placeholder="الرقم السري" autocomplete="off"><div class="err" id="je"></div><br><button class="btn ${hasU?'g':''}" id="jb" style="width:100%">دخول</button></div>
  <div class="card"><h3>نسخة احتياطية</h3><div class="row"><button class="btn g" id="lbk">حفظ نسخة</button><button class="btn g" id="lrs">استرجاع نسخة</button></div><input type="file" id="lrf" accept=".json" class="hide"></div>
  ${hasU?'':`<details class="card"><summary style="cursor:pointer">إعداد جهاز المدير (أول مرة فقط)</summary><br><input id="nn" placeholder="الاسم (مثال: Alaa)" autocomplete="off"><br><br><input id="np" type="password" inputmode="numeric" placeholder="رقم سري (4 خانات أو أكثر)" autocomplete="off"><div class="err" id="ne"></div><br><button class="btn" id="nb" style="width:100%">إنشاء حساب المدير</button></details>`}</main>`}
-function parseInvite(s){s=(s||'').trim();const m=s.match(/[#&?]j=([A-Za-z0-9]+)/);const code=(m?m[1]:s.replace(/[\s-]/g,'')).toUpperCase();let d='';const dm=s.match(/[#&]d=([^&\s]+)/);if(dm){try{d=decodeURIComponent(dm[1])}catch(e){}}return {code,d}}
-async function joinLogin(){ac();const e=$('#je');e.textContent='';const {code,d}=parseInvite($('#ji').value);const nm=$('#jn2').value.trim().toLowerCase(),pin=$('#jp').value;
+function parseInvite(s){s=(s||'').trim();const m=s.match(/[#&?]j=([A-Za-z0-9]+)/);const code=(m?m[1]:s.replace(/[\s-]/g,'')).toUpperCase();let d='';const dm=s.match(/[#&]d=([^&\s]+)/);if(dm){try{d=decodeURIComponent(dm[1])}catch(e){}}const km=s.match(/[#&]k=([^&\s]+)/);let k='';if(km){try{k=decodeURIComponent(km[1])}catch(e){}}return {code,d,k}}
+async function joinLogin(){ac();const e=$('#je');e.textContent='';const {code,d,k}=parseInvite($('#ji').value);if(k)FB.key=k;const nm=$('#jn2').value.trim().toLowerCase(),pin=$('#jp').value;
  if(!/^[A-Z2-9]{16,40}$/.test(code)){e.textContent='رابط الدعوة أو الرمز غير صحيح';return}
  const base=(d||S.settings.dbUrl||'').trim().replace(/\/+$/,'');if(!/^https?:\/\//.test(base)){e.textContent='رابط الدعوة ناقص. اطلب من المدير يرسل الرابط الكامل';return}
- if(!nm||!pin){e.textContent='اكتب الاسم والرقم السري';return}
+ if(!nm||!pin){e.textContent='اكتب الاسم والرقم السري';return}FB.extra=base;
  e.style.color='#fcd34d';e.textContent='جاري الدخول…';let meta,us;try{meta=await (await fetch(base+'/s/'+code+'/meta.json')).json();us=await (await fetch(base+'/s/'+code+'/u.json')).json()}catch(x){e.style.color='';e.textContent='تعذر الاتصال بالإنترنت';return}
  e.style.color='';if(!meta||!us){e.textContent='الاسم أو الرقم السري غلط';return}
  let rid=null,rec=null;for(const k in us){const v=us[k];if(v&&typeof v.n==='string'&&v.n.trim().toLowerCase()===nm&&hash(v.s+pin)===v.h){rid=k;rec=v;break}}
  if(!rec){e.textContent='الاسم أو الرقم السري غلط';$('#jp').value='';return}
- if(d&&!S.settings.dbUrl||d&&S.settings.dbUrl!==base){S.settings.dbUrl=base;await kvSet('settings',S.settings)}
+ if(d&&S.settings.dbUrl!==base||k&&S.settings.apiKey!==k){S.settings.dbUrl=base;if(k)S.settings.apiKey=k;await kvSet('settings',S.settings)}
  let u=S.users.find(x=>x.code===code&&x.rid===rid);
  if(!u){u={id:uid(),name:rec.n,salt:rec.s,hash:rec.h,role:rec.r==='admin'?'admin':'member',code,rid};S.users.push(u)}else{u.name=rec.n;u.salt=rec.s;u.hash=rec.h;u.role=rec.r==='admin'?'admin':'member'}
  await kvSet('users',S.users);
@@ -230,14 +230,14 @@ function viewData(){const m=$('#mn');
  <div class="card"><h3>2) تصدير التسوية</h3><div class="muted">Excel فيه: ملخص، مطابق، زيادة (موجب)، نقص (سالب)، الكل${S.sess?'':' · افتح جلسة أولاً'}</div><br><div class="row"><button class="btn ok" id="ex" ${S.sess?'':'disabled'}>⬇ تصدير Excel</button><button class="btn g" id="sh" ${S.sess?'':'disabled'}>مشاركة</button></div><div id="exm" class="muted"></div></div>
  <div class="card"><h3>3) نسخة احتياطية</h3><div class="row"><button class="btn g" id="bk">حفظ نسخة</button><button class="btn g" id="rs">استرجاع</button></div><input type="file" id="rf" accept=".json" class="hide"></div>
  <div class="card"><h3>4) الإعدادات</h3><label class="row"><span>صوت</span><input type="checkbox" id="s1" ${S.settings.sound?'checked':''} style="width:24px;flex:none"></label><br><label class="row"><span>اهتزاز</span><input type="checkbox" id="s2" ${S.settings.vib?'checked':''} style="width:24px;flex:none"></label><br><label>الكاميرا: مدة غياب الباركود عن الشاشة قبل ما ينعد مرة ثانية (مللي ثانية)<input type="number" id="s3" value="${S.settings.cooldown}"></label><br><label class="row"><span>كاميرا 4K (أوضح للباركود الصغير، أبطأ)</span><input type="checkbox" id="s4" ${S.settings.cam4k?'checked':''} style="width:24px;flex:none"></label><br><button class="btn g" id="st">اختبار الأصوات</button></div>
- <div class="card"><h3>المزامنة المباشرة</h3><div class="muted">رابط قاعدة بيانات Firebase (مرة وحدة). مثال: https://اسم-المشروع-default-rtdb.firebaseio.com</div><br><input id="dbu" dir="ltr" placeholder="https://....firebaseio.com" value="${esc(S.settings.dbUrl)}"><br><br><button class="btn g" id="dbt">حفظ واختبار الاتصال</button><div id="dbm" class="muted"></div></div>
+ <div class="card"><h3>المزامنة المباشرة</h3><div class="muted">رابط قاعدة بيانات Firebase (مرة وحدة). مثال: https://اسم-المشروع-default-rtdb.firebaseio.com</div><br><input id="dbu" dir="ltr" placeholder="https://....firebaseio.com" value="${esc(S.settings.dbUrl)}"><br><br><input id="dbk" dir="ltr" placeholder="Web API Key (للحماية، اختياري)" value="${esc(S.settings.apiKey||'')}" autocomplete="off"><br><br><button class="btn g" id="dbt">حفظ واختبار الاتصال</button><div id="dbm" class="muted"></div></div>
  <div class="card"><h3>5) مسح</h3><div class="row"><button class="btn r" id="cs" ${S.sess?'':'disabled'}>تصفير عدّ الجلسة</button><button class="btn r" id="cl">حذف القائمة</button></div></div>`;
  $('#lf').onchange=async e=>{const f=e.target.files[0];if(!f)return;const wb=XLSX.read(await f.arrayBuffer(),{type:'array',raw:true});const n=readLegend(XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,raw:true,defval:''}));alert(n?'تم حفظ '+n+' لون':'ما لقيت رموز');viewData()};
  $('#fi').onchange=e=>e.target.files[0]&&loadFile(e.target.files[0]);
  $('#ex').onclick=()=>exportXlsx(false);$('#sh').onclick=()=>exportXlsx(true);
  $('#bk').onclick=backup;$('#rs').onclick=()=>$('#rf').click();$('#rf').onchange=e=>e.target.files[0]&&restore(e.target.files[0]);
  const sv=()=>{S.settings.sound=$('#s1').checked;S.settings.vib=$('#s2').checked;S.settings.cooldown=Math.max(300,+$('#s3').value||700);kvSet('settings',S.settings)};$('#s4').onchange=()=>{stopCam();S.settings.cam4k=$('#s4').checked;kvSet('settings',S.settings)};['s1','s2','s3'].forEach(i=>$('#'+i).onchange=sv);
- $('#dbt').onclick=async()=>{let u=$('#dbu').value.trim().replace(/\/+$/,'');S.settings.dbUrl=u;kvSet('settings',S.settings);const m=$('#dbm');m.textContent='جاري الاختبار…';try{const k=genCode();const r=await fetch(u+'/s/_t'+k+'/x.json',{method:'PUT',body:'1'});if(!r.ok)throw r.status;await fetch(u+'/s/_t'+k+'.json',{method:'DELETE'});m.textContent='✔ الاتصال شغال';m.style.color='#86efac'}catch(e){m.textContent='✘ فشل الاتصال ('+e+'). تحقق من الرابط وقواعد الأمان.';m.style.color='#fca5a5'}};
+ $('#dbt').onclick=async()=>{let u=$('#dbu').value.trim().replace(/\/+$/,'');S.settings.dbUrl=u;S.settings.apiKey=($('#dbk').value||'').trim();FB.tok=null;FB.fail=0;kvSet('settings',S.settings);const m=$('#dbm');m.textContent='جاري الاختبار…';try{const k=genCode();const r=await fetch(u+'/s/_t'+k+'/x.json',{method:'PUT',body:'1'});if(!r.ok)throw r.status;await fetch(u+'/s/_t'+k+'.json',{method:'DELETE'});m.textContent='✔ الاتصال شغال'+(FB.tok?' · 🔒 الحماية شغالة':(S.settings.apiKey?' · ⚠ تسجيل الدخول المجهول غير مفعّل بعد':''));m.style.color='#86efac'}catch(e){m.textContent='✘ فشل الاتصال ('+e+'). تحقق من الرابط وقواعد الأمان.';m.style.color='#fca5a5'}};
  $('#st').onclick=()=>{ac();sndOk();setTimeout(sndBad,500)};
  $('#cs').onclick=()=>{if(confirm('تصفير كل العدّ في هذه الجلسة؟')){CNT=new Map();LOG=[];recompute();saveSess(true);viewData()}};
  $('#cl').onclick=async()=>{if(confirm('حذف قائمة الأصناف؟ (الجلسات تبقى)')){S.list=null;await kvDel('list');buildIndex();recompute();viewData()}}}
@@ -306,18 +306,27 @@ async function backup(){await saveSess(true);const all={v:1,users:S.users,list:S
 async function restore(f){try{const o=JSON.parse(await f.text());if(!o.users||!confirm('استرجاع النسخة؟ ستُستبدل البيانات الحالية.'))return;S.users=o.users;S.list=o.list;S.sessions=o.sessions||[];if(o.settings&&o.settings.dbUrl&&!S.settings.dbUrl){S.settings.dbUrl=o.settings.dbUrl;await kvSet('settings',S.settings)}await kvSet('users',S.users);if(S.list)await kvSet('list',S.list);else await kvDel('list');await kvSet('sessions',S.sessions);for(const id in o.data)await kvSet('s:'+id,o.data[id]);buildIndex();S.user=null;S.sess=null;render()}catch(e){alert('ملف غير صالح')}}
 
 /* ---------- live sync (Firebase Realtime Database REST + SSE) ---------- */
-const SY={es:null,dirty:false,timer:null,busy:false,online:false,M:{},rt:null};
+const FB={tok:null,exp:0,fail:0,extra:''};const _fetch=window.fetch.bind(window);
+const isDbUrl=u=>/\.json(\?|$)/.test(u)&&(/firebaseio\.com|firebasedatabase\.app/.test(u)||(S.settings.dbUrl&&u.startsWith(S.settings.dbUrl))||(FB.extra&&u.startsWith(FB.extra)));
+async function fbTok(){const k=(S.settings.apiKey||FB.key||'').trim();if(!k)return null;if(FB.tok&&Date.now()<FB.exp-120000)return FB.tok;if(Date.now()<FB.fail)return null;
+ try{let r;if(FB.rt)r=await _fetch('https://securetoken.googleapis.com/v1/token?key='+encodeURIComponent(k),{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'grant_type=refresh_token&refresh_token='+encodeURIComponent(FB.rt)});
+  if(!r||!r.ok)r=await _fetch('https://identitytoolkit.googleapis.com/v1/accounts:signUp?key='+encodeURIComponent(k),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({returnSecureToken:true})});
+  if(!r.ok)throw 0;const j=await r.json();FB.tok=j.idToken||j.id_token;FB.rt=j.refreshToken||j.refresh_token;FB.exp=Date.now()+(parseInt(j.expiresIn||j.expires_in||'3600',10))*1000;if(!FB.tok)throw 0;return FB.tok}
+ catch(e){FB.tok=null;FB.fail=Date.now()+30000;return null}}
+window.fetch=async(u,o)=>{if(typeof u==='string'&&isDbUrl(u)){const t=await fbTok();if(t)u+=(u.includes('?')?'&':'?')+'auth='+encodeURIComponent(t)}return _fetch(u,o)};
+const SY={g:0,es:null,dirty:false,timer:null,busy:false,online:false,M:{},rt:null};
 const dbBase=()=>(S.settings.dbUrl||'').trim().replace(/\/+$/,'');
 const devKey=()=>{let d=localStorage.getItem('st_dev');if(!d){d=uid().slice(-6);localStorage.setItem('st_dev',d)}return d+'-'+(S.user?S.user.id.slice(-4):'x')};
 const sk=s=>s.replace(/[.#$\[\]\/]/g,'_');
 function setSt(){const e=$('#sy');if(!e)return;const s=S.sess;if(!s||!s.code){e.innerHTML='';return}const R=Object.values(s.remote||{});
  e.innerHTML=`<div class="syc" style="color:${SY.online&&!SY.dirty?'#86efac':'#fcd34d'}">${SY.online?(SY.dirty?'🟡 جاري المزامنة':'🟢 متزامن'):'🟠 بدون إنترنت (يُحفظ ويُرسل لاحقاً)'} · رمز الجلسة <b dir="ltr">${esc(s.code)}</b>${R.length?' · معك: '+R.map(r=>esc(r.n)).join('، '):''}</div>`}
-function syncStop(){if(SY.es){SY.es.close();SY.es=null}clearInterval(SY.timer);SY.timer=null;SY.online=false;SY.M={}}
-function syncStart(){syncStop();const s=S.sess;if(!s||!s.code||!dbBase()){setSt();return}
- try{SY.es=new EventSource(dbBase()+'/s/'+s.code+'/d.json')}catch(e){setSt();return}
+function syncStop(){SY.g++;if(SY.es){SY.es.close();SY.es=null}clearInterval(SY.timer);SY.timer=null;SY.online=false;SY.M={}}
+async function syncStart(){syncStop();const g=SY.g;const s=S.sess;if(!s||!s.code||!dbBase()){setSt();return}
+ const tk=await fbTok();if(g!==SY.g)return;try{SY.es=new EventSource(dbBase()+'/s/'+s.code+'/d.json'+(tk?'?auth='+encodeURIComponent(tk):''))}catch(e){setSt();return}
+ SY.es.addEventListener('auth_revoked',()=>{if(g===SY.g)syncStart()});
  SY.es.addEventListener('put',ev=>onEv(JSON.parse(ev.data),false));SY.es.addEventListener('patch',ev=>onEv(JSON.parse(ev.data),true));
  SY.es.onopen=()=>{checkAccess();SY.online=true;setSt();SY.dirty=true;syncPush()};SY.es.onerror=()=>{SY.online=false;setSt()};
- SY.timer=setInterval(()=>{if(SY.dirty)syncPush()},6000);SY.dirty=true;syncPush();setSt()}
+ SY.timer=setInterval(()=>{if(FB.tok&&Date.now()>FB.exp-180000){syncStart();return}if(SY.dirty)syncPush()},6000);SY.dirty=true;syncPush();setSt()}
 function onEv(m,patch){let {path,data}=m;if(path==='/'){SY.M=patch?Object.assign(SY.M||{},data||{}):(data||{})}else{const p=path.split('/').filter(Boolean);let o=SY.M;for(let i=0;i<p.length-1;i++){if(typeof o[p[i]]!=='object'||!o[p[i]])o[p[i]]={};o=o[p[i]]}const l=p[p.length-1];if(patch&&data&&typeof data==='object'){o[l]=Object.assign(o[l]||{},data)}else if(data===null)delete o[l];else o[l]=data}
  clearTimeout(SY.rt);SY.rt=setTimeout(applyRemote,250)}
 function applyRemote(){const s=S.sess;if(!s||!s.code)return;const me=devKey(),R={};for(const d in SY.M||{}){if(d===me)continue;const v=SY.M[d];if(v&&typeof v==='object')R[d]={n:v.n||d,c:v.c||{}}}
@@ -329,7 +338,7 @@ addEventListener('online',()=>{if(S.sess&&S.sess.code){syncStart()}});addEventLi
 function genCode(){const A='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';let o='';const a=new Uint8Array(24);(crypto||msCrypto).getRandomValues(a);for(const x of a)o+=A[x%A.length];return o}
 const isAdmin=()=>!!S.user&&S.user.role!=='member';
 async function pubUser(code,u){const rid=u.rid||u.id;const r=await fetch(dbBase()+'/s/'+code+'/u/'+rid+'.json',{method:'PUT',body:JSON.stringify({n:u.name,s:u.salt,h:u.hash,r:'admin'})});return r.ok}
-function inviteLink(){return location.origin+location.pathname+'#j='+S.sess.code+'&d='+encodeURIComponent(dbBase())}
+function inviteLink(){return location.origin+location.pathname+'#j='+S.sess.code+'&d='+encodeURIComponent(dbBase())+(S.settings.apiKey?'&k='+encodeURIComponent(S.settings.apiKey):'')}
 async function usersPanel(){const el=$('#um');if(!el)return;const s=S.sess;
  if(!s||!s.code){el.innerHTML='<div class="card"><h3>👥 المستخدمون</h3><div class="muted">شارك الجلسة أولاً بزر «مشاركة الجلسة الحالية»، وبعدها تقدر تنشئ حسابات للمستخدمين هنا.</div></div>';return}
  if(!dbBase()){el.innerHTML='';return}
