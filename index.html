@@ -109,23 +109,44 @@ function render(){const a=$('#app');if(!S.user){a.innerHTML=loginHTML();bindLogi
  $('#lo').onclick=async()=>{await saveSess(true);syncStop();stopCam();releaseWake();S.user=null;S.sess=null;sessionStorage.removeItem('uid');render()};
  document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{if(S.tab==='scan')stopCam();S.tab=b.dataset.t;render()});
  ({scan:viewScan,review:viewReview,sessions:viewSessions,data:viewData})[S.tab]()}
-function loginHTML(){return `<main style="padding-top:8vh"><h2 style="text-align:center">📦 تطبيق الجرد</h2>
- ${S.users.length?`<div class="card" id="lg"><h3>تسجيل الدخول</h3><select id="lu">${S.users.map(u=>`<option value="${u.id}">${esc(u.name)}</option>`).join('')}</select><br><br><input id="lp" type="password" inputmode="numeric" placeholder="الرقم السري" autocomplete="off"><div class="err" id="le"></div><br><button class="btn" id="lb" style="width:100%">دخول</button></div>`:''}
- <div class="card"><h3>${S.users.length?'حساب جديد':'أنشئ أول حساب'}</h3><input id="nn" placeholder="الاسم (مثال: Alaa)" autocomplete="off"><br><br><input id="np" type="password" inputmode="numeric" placeholder="رقم سري (4 خانات أو أكثر)" autocomplete="off"><div class="err" id="ne"></div><br><button class="btn ${S.users.length?'g':''}" id="nb" style="width:100%">إنشاء الحساب</button></div></main>`}
-function bindLogin(){const lb=$('#lb');if(lb){const go=()=>{ac();const u=S.users.find(x=>x.id===$('#lu').value);if(u&&hash(u.salt+$('#lp').value)===u.hash)enter(u);else{$('#le').textContent='الرقم السري غلط';$('#lp').value=''}};lb.onclick=go;$('#lp').onkeydown=e=>{if(e.key==='Enter')go()}}
- $('#nb').onclick=async()=>{ac();const n=$('#nn').value.trim(),p=$('#np').value;if(!n){$('#ne').textContent='اكتب الاسم';return}if(p.length<4){$('#ne').textContent='الرقم السري لازم 4 خانات على الأقل';return}
+function loginHTML(){const hasU=S.users.length>0;
+ return `<main style="padding-top:6vh"><h2 style="text-align:center">📦 تطبيق الجرد</h2>
+ ${hasU?`<div class="card" id="lg"><h3>تسجيل الدخول</h3><select id="lu">${S.users.map(u=>`<option value="${u.id}">${esc(u.name)}</option>`).join('')}</select><br><br><input id="lp" type="password" inputmode="numeric" placeholder="الرقم السري" autocomplete="off"><div class="err" id="le"></div><br><button class="btn" id="lb" style="width:100%">دخول</button></div>`:''}
+ <div class="card"><h3>دخول إلى جلسة مشتركة</h3><div class="muted">إذا المدير أنشأ لك حساب: الصق رابط الدعوة (أو رمز الجلسة) واكتب اسمك والرقم السري اللي أعطاك إياهم.</div><br><input id="ji" dir="ltr" placeholder="رابط الدعوة أو رمز الجلسة" value="${esc(S.invite||'')}" autocomplete="off"><br><br><input id="jn2" placeholder="الاسم" autocomplete="off"><br><br><input id="jp" type="password" inputmode="numeric" placeholder="الرقم السري" autocomplete="off"><div class="err" id="je"></div><br><button class="btn ${hasU?'g':''}" id="jb" style="width:100%">دخول</button></div>
+ <div class="card"><h3>نسخة احتياطية</h3><div class="row"><button class="btn g" id="lbk">حفظ نسخة</button><button class="btn g" id="lrs">استرجاع نسخة</button></div><input type="file" id="lrf" accept=".json" class="hide"></div>
+ ${hasU?'':`<details class="card"><summary style="cursor:pointer">إعداد جهاز المدير (أول مرة فقط)</summary><br><input id="nn" placeholder="الاسم (مثال: Alaa)" autocomplete="off"><br><br><input id="np" type="password" inputmode="numeric" placeholder="رقم سري (4 خانات أو أكثر)" autocomplete="off"><div class="err" id="ne"></div><br><button class="btn" id="nb" style="width:100%">إنشاء حساب المدير</button></details>`}</main>`}
+function parseInvite(s){s=(s||'').trim();const m=s.match(/[#&?]j=([A-Za-z0-9]+)/);const code=(m?m[1]:s.replace(/[\s-]/g,'')).toUpperCase();let d='';const dm=s.match(/[#&]d=([^&\s]+)/);if(dm){try{d=decodeURIComponent(dm[1])}catch(e){}}return {code,d}}
+async function joinLogin(){ac();const e=$('#je');e.textContent='';const {code,d}=parseInvite($('#ji').value);const nm=$('#jn2').value.trim().toLowerCase(),pin=$('#jp').value;
+ if(!/^[A-Z2-9]{16,40}$/.test(code)){e.textContent='رابط الدعوة أو الرمز غير صحيح';return}
+ const base=(d||S.settings.dbUrl||'').trim().replace(/\/+$/,'');if(!/^https?:\/\//.test(base)){e.textContent='رابط الدعوة ناقص. اطلب من المدير يرسل الرابط الكامل';return}
+ if(!nm||!pin){e.textContent='اكتب الاسم والرقم السري';return}
+ e.style.color='#fcd34d';e.textContent='جاري الدخول…';let meta,us;try{meta=await (await fetch(base+'/s/'+code+'/meta.json')).json();us=await (await fetch(base+'/s/'+code+'/u.json')).json()}catch(x){e.style.color='';e.textContent='تعذر الاتصال بالإنترنت';return}
+ e.style.color='';if(!meta||!us){e.textContent='الاسم أو الرقم السري غلط';return}
+ let rid=null,rec=null;for(const k in us){const v=us[k];if(v&&typeof v.n==='string'&&v.n.trim().toLowerCase()===nm&&hash(v.s+pin)===v.h){rid=k;rec=v;break}}
+ if(!rec){e.textContent='الاسم أو الرقم السري غلط';$('#jp').value='';return}
+ if(d&&!S.settings.dbUrl||d&&S.settings.dbUrl!==base){S.settings.dbUrl=base;await kvSet('settings',S.settings)}
+ let u=S.users.find(x=>x.code===code&&x.rid===rid);
+ if(!u){u={id:uid(),name:rec.n,salt:rec.s,hash:rec.h,role:rec.r==='admin'?'admin':'member',code,rid};S.users.push(u)}else{u.name=rec.n;u.salt=rec.s;u.hash=rec.h;u.role=rec.r==='admin'?'admin':'member'}
+ await kvSet('users',S.users);
+ let ss=S.sessions.find(x=>x.uid===u.id&&x.code===code);
+ if(!ss){const s={id:uid(),uid:u.id,name:meta.name||'جلسة مشتركة',at:Date.now(),counts:{},log:[],code,remote:{}};S.sessions.push({id:s.id,uid:s.uid,name:s.name,at:s.at,total:0,code});await kvSet('s:'+s.id,s);await kvSet('sessions',S.sessions)}
+ try{history.replaceState(null,'',location.pathname)}catch(x){}S.invite='';enter(u)}
+function bindLogin(){$('#jb').onclick=joinLogin;$('#jp').onkeydown=e=>{if(e.key==='Enter')joinLogin()};
+ $('#lbk').onclick=backup;$('#lrs').onclick=()=>$('#lrf').click();$('#lrf').onchange=e=>e.target.files[0]&&restore(e.target.files[0]);
+ const lb=$('#lb');if(lb){const go=()=>{ac();const u=S.users.find(x=>x.id===$('#lu').value);if(u&&hash(u.salt+$('#lp').value)===u.hash)enter(u);else{$('#le').textContent='الرقم السري غلط';$('#lp').value=''}};lb.onclick=go;$('#lp').onkeydown=e=>{if(e.key==='Enter')go()}}
+ const nb=$('#nb');if(nb)nb.onclick=async()=>{ac();const n=$('#nn').value.trim(),p=$('#np').value;if(!n){$('#ne').textContent='اكتب الاسم';return}if(p.length<4){$('#ne').textContent='الرقم السري لازم 4 خانات على الأقل';return}
   if(S.users.some(u=>u.name.toLowerCase()===n.toLowerCase())){$('#ne').textContent='الاسم مستخدم';return}
-  const salt=uid();const u={id:uid(),name:n,salt,hash:hash(salt+p)};S.users.push(u);await kvSet('users',S.users);enter(u)}}
+  const salt=uid();const u={id:uid(),name:n,salt,hash:hash(salt+p),role:'admin'};S.users.push(u);await kvSet('users',S.users);enter(u)}}
 function enter(u){S.user=u;sessionStorage.setItem('uid',u.id);const mine=S.sessions.filter(s=>s.uid===u.id).sort((a,b)=>b.at-a.at);if(mine.length)openSess(mine[0].id);else{S.sess=null;render()}}
 async function openSess(id){await saveSess(true);const s=await kvGet('s:'+id);if(!s)return;S.sess=s;s.remote=s.remote||{};CNT=new Map(Object.entries(s.counts||{}));LOG=s.log||[];recompute();render();syncStart()}
 async function newSess(){const name=prompt('اسم الجلسة (مثال: فرع الورقاء)',new Date().toLocaleDateString('ar-AE'));if(name===null)return;await saveSess(true);syncStop();const s={id:uid(),uid:S.user.id,name:name||'جلسة',at:Date.now(),counts:{},log:[],remote:{}};S.sessions.push({id:s.id,uid:s.uid,name:s.name,at:s.at,total:0});await kvSet('s:'+s.id,s);await kvSet('sessions',S.sessions);S.sess=s;CNT=new Map();LOG=[];recompute();S.tab='scan';render()}
-function noSess(){return `<div class="card"><p>ما في جلسة جرد مفتوحة.</p>${S.list?'':'<p class="err">ما في قائمة أصناف مستوردة. بتقدر تجرد بدونها (كل شي يعتبر غير معروف)، بس الأفضل تستورد القائمة من تبويب «البيانات».</p>'}<button class="btn" id="ns">جلسة جديدة</button></div>`}
+function noSess(){return `<div class="card"><p>ما في جلسة جرد مفتوحة.</p>${S.list?'':'<p class="err">ما في قائمة أصناف مستوردة. بتقدر تجرد بدونها (كل شي يعتبر غير معروف)، بس الأفضل تستورد القائمة من تبويب «البيانات».</p>'}${isAdmin()?'<button class="btn" id="ns">جلسة جديدة</button>':'<p>اطلب من المدير يشارك لك الجلسة، وادخل من شاشة الدخول برابط الدعوة.</p>'}</div>`}
 /* scan view */
 let camStream=null,camRun=false,h5=null,wake=null;
 async function getWake(){try{if(navigator.wakeLock&&!wake){wake=await navigator.wakeLock.request('screen');wake.addEventListener('release',()=>wake=null)}}catch(e){}}
 function releaseWake(){try{wake&&wake.release()}catch(e){}wake=null}
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&S.tab==='scan'&&S.sess)getWake()});
-function viewScan(){stopCam();const m=$('#mn');if(!S.sess){m.innerHTML=noSess();$('#ns').onclick=newSess;return}
+function viewScan(){stopCam();const m=$('#mn');if(!S.sess){m.innerHTML=noSess();const nsb=$('#ns');if(nsb)nsb.onclick=newSess;return}
  getWake();
  m.innerHTML=`<div id="sy"></div><div class="muted" style="margin-bottom:6px">الجلسة: ${esc(S.sess.name)} ${S.list?'· القائمة: '+esc(S.list.name)+' ('+S.list.rows.length+' صنف)':'· بدون قائمة'}</div>
  <div class="card"><div class="hero"><b id="big">0</b><span>إجمالي القطع المعدودة</span></div><div class="stats" id="stats"></div></div>
@@ -184,7 +205,7 @@ async function startCam(){if(camRun)return;const gen=++camGen;const dead=()=>gen
 /* review view */
 let filt='all',q='',lim=100,rvT=null;
 function renderReviewSoon(){clearTimeout(rvT);rvT=setTimeout(renderReviewList,250)}
-function viewReview(){const m=$('#mn');if(!S.sess){m.innerHTML=noSess();$('#ns').onclick=newSess;return}
+function viewReview(){const m=$('#mn');if(!S.sess){m.innerHTML=noSess();const nsb=$('#ns');if(nsb)nsb.onclick=newSess;return}
  m.innerHTML=`<div class="card"><div class="stats" id="stats"></div></div><input id="sq" placeholder="بحث بالباركود أو الاسم أو الرمز" value="${esc(q)}"><div class="row" style="margin:8px 0">${[['all','الكل'],['ex','زيادة'],['mi','ناقص'],['ok','مطابق'],['sc','المعدود']].map(([k,t])=>`<button class="btn sm ${filt===k?'':'g'}" data-f="${k}">${t}</button>`).join('')}</div><div class="card" id="rl"></div>`;
  updStats();$('#sq').oninput=e=>{q=e.target.value;lim=100;renderReviewList()};
  m.querySelectorAll('[data-f]').forEach(b=>b.onclick=()=>{filt=b.dataset.f;lim=100;viewReview()});renderReviewList()}
@@ -199,8 +220,8 @@ function renderReviewList(){const el=$('#rl');if(!el)return;const rows=rowsView(
  el.querySelectorAll('.it').forEach(d=>d.onclick=()=>{const b=d.dataset.b;const cur=MC.get(b)||0;const v=prompt('عدّل إجمالي المعدود للصنف\n'+b,cur);if(v===null)return;let n=parseInt(toEn(v),10);if(isNaN(n)||n<0)return;const own=CNT.get(b)||0,other=cur-own;const nv=Math.max(0,n-other);if(nv===0)CNT.delete(b);else CNT.set(b,nv);recompute();saveSess();updStats();renderReviewList()})}
 /* sessions */
 function viewSessions(){const m=$('#mn');const mine=S.sessions.filter(s=>s.uid===S.user.id).sort((a,b)=>b.at-a.at);
- m.innerHTML=`<button class="btn" id="ns" style="width:100%;margin-bottom:8px">+ جلسة جرد جديدة</button><div class="row" style="margin-bottom:12px"><button class="btn g" id="shs" ${S.sess?'':'disabled'}>🔗 مشاركة الجلسة الحالية</button><button class="btn g" id="jn">➕ انضمام برمز</button></div><div class="card">${mine.map(s=>`<div class="it"><div class="m"><b>${esc(s.name)}${s.code?' 🔗 '+esc(s.code):''}${S.sess&&S.sess.id===s.id?' ✔':''}</b><small style="direction:rtl">${new Date(s.at).toLocaleString('ar-AE')} · ${s.total||0} قطعة</small></div><button class="btn g sm" data-o="${s.id}">فتح</button><button class="btn r sm" data-d="${s.id}">حذف</button></div>`).join('')||'<div class="muted">لا جلسات بعد</div>'}</div>`;
- $('#ns').onclick=newSess;$('#shs').onclick=shareSess;$('#jn').onclick=joinSess;m.querySelectorAll('[data-o]').forEach(b=>b.onclick=async()=>{await openSess(b.dataset.o);S.tab='scan';render()});
+ const adm=isAdmin();m.innerHTML=`${adm?`<button class="btn" id="ns" style="width:100%;margin-bottom:8px">+ جلسة جرد جديدة</button><div class="row" style="margin-bottom:12px"><button class="btn g" id="shs" ${S.sess?'':'disabled'}>🔗 مشاركة الجلسة الحالية</button><button class="btn g" id="jn">➕ انضمام برمز</button></div><div id="um"></div>`:''}<div class="card">${mine.map(s=>`<div class="it"><div class="m"><b>${esc(s.name)}${s.code?' 🔗 '+esc(s.code):''}${S.sess&&S.sess.id===s.id?' ✔':''}</b><small style="direction:rtl">${new Date(s.at).toLocaleString('ar-AE')} · ${s.total||0} قطعة</small></div><button class="btn g sm" data-o="${s.id}">فتح</button><button class="btn r sm" data-d="${s.id}">حذف</button></div>`).join('')||'<div class="muted">لا جلسات بعد</div>'}</div>`;
+ if(adm){$('#ns').onclick=newSess;$('#shs').onclick=shareSess;$('#jn').onclick=joinSess;usersPanel()}m.querySelectorAll('[data-o]').forEach(b=>b.onclick=async()=>{await openSess(b.dataset.o);S.tab='scan';render()});
  m.querySelectorAll('[data-d]').forEach(b=>b.onclick=async()=>{if(!confirm('حذف هذه الجلسة نهائياً؟'))return;const id=b.dataset.d;S.sessions=S.sessions.filter(s=>s.id!==id);await kvSet('sessions',S.sessions);await kvDel('s:'+id);if(S.sess&&S.sess.id===id){S.sess=null;CNT=new Map();ST={scanned:0,ok:0,extra:0}}viewSessions()})}
 /* data view: import/export */
 function viewData(){const m=$('#mn');
@@ -282,7 +303,7 @@ async function exportXlsx(share){if(!S.sess)return;const t0=performance.now();co
  m.textContent='تم التصدير في '+((performance.now()-t0)/1000).toFixed(1)+' ثانية: '+fn}
 async function backup(){await saveSess(true);const all={v:1,users:S.users,list:S.list,sessions:S.sessions,settings:S.settings,data:{}};for(const s of S.sessions)all.data[s.id]=await kvGet('s:'+s.id);
  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(all)],{type:'application/json'}));a.download='جرد_نسخة_'+new Date().toISOString().slice(0,10)+'.json';document.body.appendChild(a);a.click();setTimeout(()=>a.remove(),3000)}
-async function restore(f){try{const o=JSON.parse(await f.text());if(!o.users||!confirm('استرجاع النسخة؟ ستُستبدل البيانات الحالية.'))return;S.users=o.users;S.list=o.list;S.sessions=o.sessions||[];await kvSet('users',S.users);if(S.list)await kvSet('list',S.list);else await kvDel('list');await kvSet('sessions',S.sessions);for(const id in o.data)await kvSet('s:'+id,o.data[id]);buildIndex();S.user=null;S.sess=null;render()}catch(e){alert('ملف غير صالح')}}
+async function restore(f){try{const o=JSON.parse(await f.text());if(!o.users||!confirm('استرجاع النسخة؟ ستُستبدل البيانات الحالية.'))return;S.users=o.users;S.list=o.list;S.sessions=o.sessions||[];if(o.settings&&o.settings.dbUrl&&!S.settings.dbUrl){S.settings.dbUrl=o.settings.dbUrl;await kvSet('settings',S.settings)}await kvSet('users',S.users);if(S.list)await kvSet('list',S.list);else await kvDel('list');await kvSet('sessions',S.sessions);for(const id in o.data)await kvSet('s:'+id,o.data[id]);buildIndex();S.user=null;S.sess=null;render()}catch(e){alert('ملف غير صالح')}}
 
 /* ---------- live sync (Firebase Realtime Database REST + SSE) ---------- */
 const SY={es:null,dirty:false,timer:null,busy:false,online:false,M:{},rt:null};
@@ -295,7 +316,7 @@ function syncStop(){if(SY.es){SY.es.close();SY.es=null}clearInterval(SY.timer);S
 function syncStart(){syncStop();const s=S.sess;if(!s||!s.code||!dbBase()){setSt();return}
  try{SY.es=new EventSource(dbBase()+'/s/'+s.code+'/d.json')}catch(e){setSt();return}
  SY.es.addEventListener('put',ev=>onEv(JSON.parse(ev.data),false));SY.es.addEventListener('patch',ev=>onEv(JSON.parse(ev.data),true));
- SY.es.onopen=()=>{SY.online=true;setSt();SY.dirty=true;syncPush()};SY.es.onerror=()=>{SY.online=false;setSt()};
+ SY.es.onopen=()=>{checkAccess();SY.online=true;setSt();SY.dirty=true;syncPush()};SY.es.onerror=()=>{SY.online=false;setSt()};
  SY.timer=setInterval(()=>{if(SY.dirty)syncPush()},6000);SY.dirty=true;syncPush();setSt()}
 function onEv(m,patch){let {path,data}=m;if(path==='/'){SY.M=patch?Object.assign(SY.M||{},data||{}):(data||{})}else{const p=path.split('/').filter(Boolean);let o=SY.M;for(let i=0;i<p.length-1;i++){if(typeof o[p[i]]!=='object'||!o[p[i]])o[p[i]]={};o=o[p[i]]}const l=p[p.length-1];if(patch&&data&&typeof data==='object'){o[l]=Object.assign(o[l]||{},data)}else if(data===null)delete o[l];else o[l]=data}
  clearTimeout(SY.rt);SY.rt=setTimeout(applyRemote,250)}
@@ -306,10 +327,30 @@ async function syncPush(){const s=S.sess;if(!s||!s.code||!dbBase()||SY.busy)retu
  catch(e){SY.online=false;SY.dirty=true}SY.busy=false;setSt()}
 addEventListener('online',()=>{if(S.sess&&S.sess.code){syncStart()}});addEventListener('offline',()=>{SY.online=false;setSt()});
 function genCode(){const A='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';let o='';const a=new Uint8Array(24);(crypto||msCrypto).getRandomValues(a);for(const x of a)o+=A[x%A.length];return o}
+const isAdmin=()=>!!S.user&&S.user.role!=='member';
+async function pubUser(code,u){const rid=u.rid||u.id;const r=await fetch(dbBase()+'/s/'+code+'/u/'+rid+'.json',{method:'PUT',body:JSON.stringify({n:u.name,s:u.salt,h:u.hash,r:'admin'})});return r.ok}
+function inviteLink(){return location.origin+location.pathname+'#j='+S.sess.code+'&d='+encodeURIComponent(dbBase())}
+async function usersPanel(){const el=$('#um');if(!el)return;const s=S.sess;
+ if(!s||!s.code){el.innerHTML='<div class="card"><h3>👥 المستخدمون</h3><div class="muted">شارك الجلسة أولاً بزر «مشاركة الجلسة الحالية»، وبعدها تقدر تنشئ حسابات للمستخدمين هنا.</div></div>';return}
+ if(!dbBase()){el.innerHTML='';return}
+ el.innerHTML='<div class="card"><h3>👥 المستخدمون</h3><div class="muted">جاري التحميل…</div></div>';
+ let us;try{us=await (await fetch(dbBase()+'/s/'+s.code+'/u.json')).json()}catch(e){el.innerHTML='<div class="card"><h3>👥 المستخدمون</h3><div class="err">تعذر الاتصال بالإنترنت</div></div>';return}
+ us=us||{};const me=S.user.rid||S.user.id;if(!us[me]){if(await pubUser(s.code,S.user))us[me]={n:S.user.name,r:'admin'}}
+ if(!$('#um'))return;
+ el.innerHTML=`<div class="card"><h3>👥 المستخدمون</h3>${Object.keys(us).map(k=>`<div class="it"><div class="m"><b>${esc(us[k].n)}</b><small>${k===me?'أنت (المدير)':(us[k].r==='admin'?'مدير':'مستخدم')}</small></div>${k===me?'':`<button class="btn r sm" data-ru="${k}">حذف</button>`}</div>`).join('')}
+ <div class="muted" style="margin-top:10px">أضف حساب لصديقك (اسم + رقم سري)، وأعطه الاسم والرقم السري ورابط الدعوة.</div><br><input id="an" placeholder="اسم المستخدم" autocomplete="off"><br><br><input id="ap" type="password" inputmode="numeric" placeholder="رقم سري (4 خانات أو أكثر)" autocomplete="off"><div class="err" id="ae"></div><br><button class="btn" id="aa" style="width:100%">➕ إضافة المستخدم</button>
+ <div class="row" style="margin-top:12px"><button class="btn g" id="ci">📋 نسخ رابط الدعوة</button><button class="btn g" id="si">📤 مشاركة الرابط</button></div></div>`;
+ $('#aa').onclick=async()=>{const n=$('#an').value.trim(),p=$('#ap').value,e=$('#ae');e.textContent='';if(!n){e.textContent='اكتب الاسم';return}if(p.length<4){e.textContent='الرقم السري لازم 4 خانات على الأقل';return}
+  if(Object.values(us).some(v=>v&&v.n&&v.n.trim().toLowerCase()===n.toLowerCase())){e.textContent='الاسم مستخدم';return}
+  const salt=uid(),rid=uid();try{const r=await fetch(dbBase()+'/s/'+s.code+'/u/'+rid+'.json',{method:'PUT',body:JSON.stringify({n,s:salt,h:hash(salt+p),r:'member'})});if(!r.ok)throw 0}catch(x){e.textContent='تعذر الحفظ. تأكد من الإنترنت';return}usersPanel()};
+ el.querySelectorAll('[data-ru]').forEach(b=>b.onclick=async()=>{if(!confirm('حذف هذا المستخدم؟ ما راح يقدر يدخل بعدها.'))return;try{await fetch(dbBase()+'/s/'+s.code+'/u/'+b.dataset.ru+'.json',{method:'DELETE'})}catch(e){}usersPanel()});
+ $('#ci').onclick=async()=>{const l=inviteLink();try{await navigator.clipboard.writeText(l);alert('تم نسخ رابط الدعوة')}catch(e){prompt('انسخ الرابط:',l)}};
+ $('#si').onclick=async()=>{const l=inviteLink();if(navigator.share){try{await navigator.share({title:'دعوة جرد',text:'رابط الدخول لجلسة الجرد:',url:l})}catch(e){}}else prompt('انسخ الرابط:',l)}}
+async function checkAccess(){const u=S.user,s=S.sess;if(!u||u.role!=='member'||!u.rid||!s||!s.code||!dbBase())return;try{const r=await fetch(dbBase()+'/s/'+s.code+'/u/'+u.rid+'.json');if(!r.ok)return;const v=await r.json();if(v===null){alert('تم إلغاء حسابك من قبل المدير');S.users=S.users.filter(x=>x.id!==u.id);await kvSet('users',S.users);syncStop();stopCam();S.user=null;S.sess=null;sessionStorage.removeItem('uid');render()}}catch(e){}}
 async function shareSess(){const s=S.sess;if(!s)return;if(!dbBase()){alert('أدخل رابط قاعدة البيانات أولاً من تبويب «البيانات» > المزامنة');return}
  if(s.code){alert('الجلسة مشتركة أصلاً. الرمز: '+s.code);return}
  const code=genCode();try{const r=await fetch(dbBase()+'/s/'+code+'/meta.json',{method:'PUT',body:JSON.stringify({name:s.name,by:S.user.name,at:Date.now()})});if(!r.ok)throw 0}catch(e){alert('تعذر الاتصال بقاعدة البيانات. تأكد من الإنترنت والرابط.');return}
- s.code=code;s.remote={};await saveSess(true);syncStart();alert('رمز الجلسة: '+code+'\\nأعطه لصديقك ليدخله في «انضمام»');S.tab='scan';render()}
+ s.code=code;s.remote={};await pubUser(code,S.user);await saveSess(true);syncStart();alert('تمت مشاركة الجلسة. افتح تبويب «الجلسات» لإنشاء حساب لصديقك وإرسال رابط الدعوة.');S.tab='sessions';render()}
 async function joinSess(){if(!dbBase()){alert('أدخل رابط قاعدة البيانات أولاً من تبويب «البيانات» > المزامنة');return}
  const code=(prompt('أدخل رمز الجلسة')||'').replace(/[\s-]/g,'').toUpperCase();if(!code)return;if(!/^[A-Z2-9]{16,40}$/.test(code)){alert('رمز الجلسة غير صحيح');return}let meta;try{const r=await fetch(dbBase()+'/s/'+code+'/meta.json');meta=await r.json()}catch(e){alert('تعذر الاتصال بالإنترنت');return}
  if(!meta){alert('الرمز غير موجود');return}await saveSess(true);
@@ -320,5 +361,5 @@ function perUser(){const names=[],cols=[];const get=n=>{let i=names.indexOf(n);i
 /* ---------- boot ---------- */
 (async function(){S.users=(await kvGet('users'))||[];S.list=(await kvGet('list'))||null;S.legend=(await kvGet('legend'))||null;S.sessions=(await kvGet('sessions'))||[];Object.assign(S.settings,(await kvGet('settings'))||{});buildIndex();
  try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist()}catch(e){}
- const id=sessionStorage.getItem('uid');const u=S.users.find(x=>x.id===id);if(u)enter(u);else render()})();
+ S.invite=/[#&]j=/.test(location.hash)?location.href:'';const id=sessionStorage.getItem('uid');const u=S.users.find(x=>x.id===id);if(u)enter(u);else render()})();
 </script></body></html>
