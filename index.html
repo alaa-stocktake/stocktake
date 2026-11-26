@@ -305,13 +305,13 @@ async function syncPush(){const s=S.sess;if(!s||!s.code||!dbBase()||SY.busy)retu
  try{const c={};for(const [k,n] of CNT)c[sk(k)]=n;const r=await fetch(dbBase()+'/s/'+s.code+'/d/'+devKey()+'.json',{method:'PUT',body:JSON.stringify({n:S.user.name,c,t:sent})});if(!r.ok)throw 0;SY.online=true;SY.dirty=false;SY.lastOk=sent}
  catch(e){SY.online=false;SY.dirty=true}SY.busy=false;setSt()}
 addEventListener('online',()=>{if(S.sess&&S.sess.code){syncStart()}});addEventListener('offline',()=>{SY.online=false;setSt()});
-function genCode(){const A='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';let o='';const a=new Uint8Array(8);(crypto||msCrypto).getRandomValues(a);for(const x of a)o+=A[x%A.length];return o}
+function genCode(){const A='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';let o='';const a=new Uint8Array(24);(crypto||msCrypto).getRandomValues(a);for(const x of a)o+=A[x%A.length];return o}
 async function shareSess(){const s=S.sess;if(!s)return;if(!dbBase()){alert('أدخل رابط قاعدة البيانات أولاً من تبويب «البيانات» > المزامنة');return}
  if(s.code){alert('الجلسة مشتركة أصلاً. الرمز: '+s.code);return}
  const code=genCode();try{const r=await fetch(dbBase()+'/s/'+code+'/meta.json',{method:'PUT',body:JSON.stringify({name:s.name,by:S.user.name,at:Date.now()})});if(!r.ok)throw 0}catch(e){alert('تعذر الاتصال بقاعدة البيانات. تأكد من الإنترنت والرابط.');return}
  s.code=code;s.remote={};await saveSess(true);syncStart();alert('رمز الجلسة: '+code+'\\nأعطه لصديقك ليدخله في «انضمام»');S.tab='scan';render()}
 async function joinSess(){if(!dbBase()){alert('أدخل رابط قاعدة البيانات أولاً من تبويب «البيانات» > المزامنة');return}
- const code=(prompt('أدخل رمز الجلسة')||'').trim().toUpperCase();if(!code)return;let meta;try{const r=await fetch(dbBase()+'/s/'+code+'/meta.json');meta=await r.json()}catch(e){alert('تعذر الاتصال بالإنترنت');return}
+ const code=(prompt('أدخل رمز الجلسة')||'').replace(/[\s-]/g,'').toUpperCase();if(!code)return;if(!/^[A-Z2-9]{16,40}$/.test(code)){alert('رمز الجلسة غير صحيح');return}let meta;try{const r=await fetch(dbBase()+'/s/'+code+'/meta.json');meta=await r.json()}catch(e){alert('تعذر الاتصال بالإنترنت');return}
  if(!meta){alert('الرمز غير موجود');return}await saveSess(true);
  const s={id:uid(),uid:S.user.id,name:meta.name||'جلسة مشتركة',at:Date.now(),counts:{},log:[],code,remote:{}};S.sessions.push({id:s.id,uid:s.uid,name:s.name,at:s.at,total:0,code});await kvSet('s:'+s.id,s);await kvSet('sessions',S.sessions);S.sess=s;CNT=new Map();LOG=[];recompute();S.tab='scan';render();syncStart()}
 function perUser(){const names=[],cols=[];const get=n=>{let i=names.indexOf(n);if(i<0){names.push(n);cols.push(new Map());i=names.length-1}return cols[i]};
