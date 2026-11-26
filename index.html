@@ -120,11 +120,25 @@ async function joinLogin(){ac();const e=$('#je');e.textContent='';const {code,d,
  if(!/^[A-Z2-9]{16,40}$/.test(code)){e.textContent='رابط الدعوة أو الرمز غير صحيح';return}
  const base=(d||S.settings.dbUrl||'').trim().replace(/\/+$/,'');if(!/^https?:\/\//.test(base)){e.textContent='رابط الدعوة ناقص. اطلب من المدير يرسل الرابط الكامل';return}
  if(!nm||!pin){e.textContent='اكتب الاسم والرقم السري';return}FB.extra=base;
- e.style.color='#fcd34d';e.textContent='جاري الدخول…';let meta,us;try{meta=await (await fetch(base+'/s/'+code+'/meta.json')).json();us=await (await fetch(base+'/s/'+code+'/u.json')).json()}catch(x){e.style.color='';e.textContent='تعذر الاتصال بالإنترنت';return}
+ if(d&&S.settings.dbUrl!==base||k&&S.settings.apiKey!==k){S.settings.dbUrl=base;if(k)S.settings.apiKey=k;await kvSet('settings',S.settings)}
+ e.style.color='#fcd34d';e.textContent='جاري الدخول…';let meta=null,us=null,needJoin=false;
+ try{const rm=await fetch(base+'/s/'+code+'/meta.json');if(rm.status===401)needJoin=true;else meta=await rm.json()}catch(x){e.style.color='';e.textContent='تعذر الاتصال بالإنترنت';return}
+ if(!needJoin)try{const ru=await fetch(base+'/s/'+code+'/u.json');if(ru.status===401)needJoin=true;else us=await ru.json()}catch(x){e.style.color='';e.textContent='تعذر الاتصال بالإنترنت';return}
+ if(needJoin){
+  const tk=await fbTok();if(!tk||!FB.uid){e.style.color='';e.textContent='هذه الجلسة محمية. اطلب من المدير رابط دعوة جديد فيه مفتاح';return}
+  try{const rj=await fetch(base+'/s/'+code+'/join/'+FB.uid+'.json',{method:'PUT',body:JSON.stringify({n:$('#jn2').value.trim(),p:pin,at:Date.now()})});if(!rj.ok)throw 0}catch(x){e.style.color='';e.textContent='تعذر إرسال طلب الانضمام. تأكد من الإنترنت';return}
+  e.textContent='بانتظار موافقة المدير… خلّيه فاتح التطبيق';
+  let ok=false;for(let i=0;i<40;i++){await new Promise(r=>setTimeout(r,3000));
+   let mem=null,jex=true;
+   try{mem=await (await fetch(base+'/s/'+code+'/members/'+FB.uid+'.json')).json()}catch(x){}
+   try{jex=(await (await fetch(base+'/s/'+code+'/join/'+FB.uid+'.json')).json())!==null}catch(x){}
+   if(mem){ok=true;break}
+   if(!jex){e.style.color='';e.textContent='المدير رفض الطلب. تأكد من الاسم والرقم السري';return}}
+  if(!ok){e.style.color='';e.textContent='ما وصلت موافقة المدير. خلّيه فاتح التطبيق وجرب من جديد';return}
+  try{meta=await (await fetch(base+'/s/'+code+'/meta.json')).json();us=await (await fetch(base+'/s/'+code+'/u.json')).json()}catch(x){e.style.color='';e.textContent='تعذر الاتصال بالإنترنت';return}}
  e.style.color='';if(!meta||!us){e.textContent='الاسم أو الرقم السري غلط';return}
  let rid=null,rec=null;for(const k in us){const v=us[k];if(v&&typeof v.n==='string'&&v.n.trim().toLowerCase()===nm&&hash(v.s+pin)===v.h){rid=k;rec=v;break}}
  if(!rec){e.textContent='الاسم أو الرقم السري غلط';$('#jp').value='';return}
- if(d&&S.settings.dbUrl!==base||k&&S.settings.apiKey!==k){S.settings.dbUrl=base;if(k)S.settings.apiKey=k;await kvSet('settings',S.settings)}
  let u=S.users.find(x=>x.code===code&&x.rid===rid);
  if(!u){u={id:uid(),name:rec.n,salt:rec.s,hash:rec.h,role:rec.r==='admin'?'admin':'member',code,rid};S.users.push(u)}else{u.name=rec.n;u.salt=rec.s;u.hash=rec.h;u.role=rec.r==='admin'?'admin':'member'}
  await kvSet('users',S.users);
@@ -237,7 +251,7 @@ function viewData(){const m=$('#mn');
  $('#ex').onclick=()=>exportXlsx(false);$('#sh').onclick=()=>exportXlsx(true);
  $('#bk').onclick=backup;$('#rs').onclick=()=>$('#rf').click();$('#rf').onchange=e=>e.target.files[0]&&restore(e.target.files[0]);
  const sv=()=>{S.settings.sound=$('#s1').checked;S.settings.vib=$('#s2').checked;S.settings.cooldown=Math.max(300,+$('#s3').value||700);kvSet('settings',S.settings)};$('#s4').onchange=()=>{stopCam();S.settings.cam4k=$('#s4').checked;kvSet('settings',S.settings)};['s1','s2','s3'].forEach(i=>$('#'+i).onchange=sv);
- $('#dbt').onclick=async()=>{let u=$('#dbu').value.trim().replace(/\/+$/,'');S.settings.dbUrl=u;S.settings.apiKey=($('#dbk').value||'').trim();FB.tok=null;FB.fail=0;kvSet('settings',S.settings);const m=$('#dbm');m.textContent='جاري الاختبار…';try{const k=genCode();const r=await fetch(u+'/s/_t'+k+'/x.json',{method:'PUT',body:'1'});if(!r.ok)throw r.status;await fetch(u+'/s/_t'+k+'.json',{method:'DELETE'});m.textContent='✔ الاتصال شغال'+(FB.tok?' · 🔒 الحماية شغالة':(S.settings.apiKey?' · ⚠ تسجيل الدخول المجهول غير مفعّل بعد':''));m.style.color='#86efac'}catch(e){m.textContent='✘ فشل الاتصال ('+e+'). تحقق من الرابط وقواعد الأمان.';m.style.color='#fca5a5'}};
+ $('#dbt').onclick=async()=>{let u=$('#dbu').value.trim().replace(/\/+$/,'');S.settings.dbUrl=u;S.settings.apiKey=($('#dbk').value||'').trim();FB.tok=null;FB.fail=0;fbWipe();kvSet('settings',S.settings);const m=$('#dbm');m.textContent='جاري الاختبار…';try{const k=genCode();await fbTok();const r=await fetch(u+'/s/_t'+k+'/meta.json',{method:'PUT',body:JSON.stringify({owner:FB.uid||'x',t:1})});if(!r.ok)throw r.status;await fetch(u+'/s/_t'+k+'/meta.json',{method:'DELETE'});let locked=false;try{locked=(await _fetch(u+'/s/_t'+k+'/x.json')).status===401}catch(x){}m.textContent='✔ الاتصال شغال'+(FB.tok?(locked?' · 🔒 الحماية شغالة':' · ⚠ القواعد لسا مفتوحة'):(S.settings.apiKey?' · ⚠ تسجيل الدخول المجهول غير مفعّل بعد':''));m.style.color='#86efac'}catch(e){m.textContent='✘ فشل الاتصال ('+e+'). تحقق من الرابط وقواعد الأمان.';m.style.color='#fca5a5'}};
  $('#st').onclick=()=>{ac();sndOk();setTimeout(sndBad,500)};
  $('#cs').onclick=()=>{if(confirm('تصفير كل العدّ في هذه الجلسة؟')){CNT=new Map();LOG=[];recompute();saveSess(true);viewData()}};
  $('#cl').onclick=async()=>{if(confirm('حذف قائمة الأصناف؟ (الجلسات تبقى)')){S.list=null;await kvDel('list');buildIndex();recompute();viewData()}}}
@@ -306,12 +320,16 @@ async function backup(){await saveSess(true);const all={v:1,users:S.users,list:S
 async function restore(f){try{const o=JSON.parse(await f.text());if(!o.users||!confirm('استرجاع النسخة؟ ستُستبدل البيانات الحالية.'))return;S.users=o.users;S.list=o.list;S.sessions=o.sessions||[];if(o.settings&&o.settings.dbUrl&&!S.settings.dbUrl){S.settings.dbUrl=o.settings.dbUrl;await kvSet('settings',S.settings)}await kvSet('users',S.users);if(S.list)await kvSet('list',S.list);else await kvDel('list');await kvSet('sessions',S.sessions);for(const id in o.data)await kvSet('s:'+id,o.data[id]);buildIndex();S.user=null;S.sess=null;render()}catch(e){alert('ملف غير صالح')}}
 
 /* ---------- live sync (Firebase Realtime Database REST + SSE) ---------- */
-const FB={tok:null,exp:0,fail:0,extra:''};const _fetch=window.fetch.bind(window);
+const FB={tok:null,exp:0,fail:0,extra:'',rt:null,uid:null,key:''};const _fetch=window.fetch.bind(window);
+const fbKey=()=>'st_fb_'+(S.settings.dbUrl||'').replace(/[^A-Za-z0-9]/g,'');
+function fbLoad(){if(FB.rt)return;try{const j=JSON.parse(localStorage.getItem(fbKey())||'null');if(j&&j.rt){FB.rt=j.rt;FB.uid=j.uid||null}}catch(e){}}
+function fbSave(){try{if(FB.rt)localStorage.setItem(fbKey(),JSON.stringify({rt:FB.rt,uid:FB.uid}))}catch(e){}}
+function fbWipe(){FB.rt=null;FB.uid=null;FB.tok=null;try{localStorage.removeItem(fbKey())}catch(e){}}
 const isDbUrl=u=>/\.json(\?|$)/.test(u)&&(/firebaseio\.com|firebasedatabase\.app/.test(u)||(S.settings.dbUrl&&u.startsWith(S.settings.dbUrl))||(FB.extra&&u.startsWith(FB.extra)));
-async function fbTok(){const k=(S.settings.apiKey||FB.key||'').trim();if(!k)return null;if(FB.tok&&Date.now()<FB.exp-120000)return FB.tok;if(Date.now()<FB.fail)return null;
+async function fbTok(){const k=(S.settings.apiKey||FB.key||'').trim();if(!k)return null;if(FB.tok&&Date.now()<FB.exp-120000)return FB.tok;if(Date.now()<FB.fail)return null;fbLoad();
  try{let r;if(FB.rt)r=await _fetch('https://securetoken.googleapis.com/v1/token?key='+encodeURIComponent(k),{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'grant_type=refresh_token&refresh_token='+encodeURIComponent(FB.rt)});
   if(!r||!r.ok)r=await _fetch('https://identitytoolkit.googleapis.com/v1/accounts:signUp?key='+encodeURIComponent(k),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({returnSecureToken:true})});
-  if(!r.ok)throw 0;const j=await r.json();FB.tok=j.idToken||j.id_token;FB.rt=j.refreshToken||j.refresh_token;FB.exp=Date.now()+(parseInt(j.expiresIn||j.expires_in||'3600',10))*1000;if(!FB.tok)throw 0;return FB.tok}
+  if(!r.ok)throw 0;const j=await r.json();FB.tok=j.idToken||j.id_token;FB.rt=j.refreshToken||j.refresh_token;FB.uid=j.localId||j.local_id||j.user_id||FB.uid;FB.exp=Date.now()+(parseInt(j.expiresIn||j.expires_in||'3600',10))*1000;if(!FB.tok)throw 0;fbSave();return FB.tok}
  catch(e){FB.tok=null;FB.fail=Date.now()+30000;return null}}
 window.fetch=async(u,o)=>{if(typeof u==='string'&&isDbUrl(u)){const t=await fbTok();if(t)u+=(u.includes('?')?'&':'?')+'auth='+encodeURIComponent(t)}return _fetch(u,o)};
 const SY={g:0,es:null,dirty:false,timer:null,busy:false,online:false,M:{},rt:null};
@@ -326,7 +344,7 @@ async function syncStart(){syncStop();const g=SY.g;const s=S.sess;if(!s||!s.code
  SY.es.addEventListener('auth_revoked',()=>{if(g===SY.g)syncStart()});
  SY.es.addEventListener('put',ev=>onEv(JSON.parse(ev.data),false));SY.es.addEventListener('patch',ev=>onEv(JSON.parse(ev.data),true));
  SY.es.onopen=()=>{checkAccess();SY.online=true;setSt();SY.dirty=true;syncPush()};SY.es.onerror=()=>{SY.online=false;setSt()};
- SY.timer=setInterval(()=>{if(FB.tok&&Date.now()>FB.exp-180000){syncStart();return}if(SY.dirty)syncPush()},6000);SY.dirty=true;syncPush();setSt()}
+ SY.timer=setInterval(()=>{if(FB.tok&&Date.now()>FB.exp-180000){syncStart();return}if(SY.dirty)syncPush();pollJoins()},6000);SY.dirty=true;syncPush();setSt()}
 function onEv(m,patch){let {path,data}=m;if(path==='/'){SY.M=patch?Object.assign(SY.M||{},data||{}):(data||{})}else{const p=path.split('/').filter(Boolean);let o=SY.M;for(let i=0;i<p.length-1;i++){if(typeof o[p[i]]!=='object'||!o[p[i]])o[p[i]]={};o=o[p[i]]}const l=p[p.length-1];if(patch&&data&&typeof data==='object'){o[l]=Object.assign(o[l]||{},data)}else if(data===null)delete o[l];else o[l]=data}
  clearTimeout(SY.rt);SY.rt=setTimeout(applyRemote,250)}
 function applyRemote(){const s=S.sess;if(!s||!s.code)return;const me=devKey(),R={};for(const d in SY.M||{}){if(d===me)continue;const v=SY.M[d];if(v&&typeof v==='object')R[d]={n:v.n||d,c:v.c||{}}}
@@ -352,13 +370,45 @@ async function usersPanel(){const el=$('#um');if(!el)return;const s=S.sess;
  $('#aa').onclick=async()=>{const n=$('#an').value.trim(),p=$('#ap').value,e=$('#ae');e.textContent='';if(!n){e.textContent='اكتب الاسم';return}if(p.length<4){e.textContent='الرقم السري لازم 4 خانات على الأقل';return}
   if(Object.values(us).some(v=>v&&v.n&&v.n.trim().toLowerCase()===n.toLowerCase())){e.textContent='الاسم مستخدم';return}
   const salt=uid(),rid=uid();try{const r=await fetch(dbBase()+'/s/'+s.code+'/u/'+rid+'.json',{method:'PUT',body:JSON.stringify({n,s:salt,h:hash(salt+p),r:'member'})});if(!r.ok)throw 0}catch(x){e.textContent='تعذر الحفظ. تأكد من الإنترنت';return}usersPanel()};
- el.querySelectorAll('[data-ru]').forEach(b=>b.onclick=async()=>{if(!confirm('حذف هذا المستخدم؟ ما راح يقدر يدخل بعدها.'))return;try{await fetch(dbBase()+'/s/'+s.code+'/u/'+b.dataset.ru+'.json',{method:'DELETE'})}catch(e){}usersPanel()});
+ el.querySelectorAll('[data-ru]').forEach(b=>b.onclick=async()=>{if(!confirm('حذف هذا المستخدم؟ ما راح يقدر يدخل بعدها.'))return;try{await fetch(dbBase()+'/s/'+s.code+'/u/'+b.dataset.ru+'.json',{method:'DELETE'})}catch(e){}
+ try{const mm=await (await fetch(dbBase()+'/s/'+s.code+'/members.json')).json();if(mm)for(const mu in mm)if(mm[mu]&&mm[mu].rid===b.dataset.ru)await fetch(dbBase()+'/s/'+s.code+'/members/'+mu+'.json',{method:'DELETE'})}catch(e){}usersPanel()});
  $('#ci').onclick=async()=>{const l=inviteLink();try{await navigator.clipboard.writeText(l);alert('تم نسخ رابط الدعوة')}catch(e){prompt('انسخ الرابط:',l)}};
  $('#si').onclick=async()=>{const l=inviteLink();if(navigator.share){try{await navigator.share({title:'دعوة جرد',text:'رابط الدخول لجلسة الجرد:',url:l})}catch(e){}}else prompt('انسخ الرابط:',l)}}
-async function checkAccess(){const u=S.user,s=S.sess;if(!u||u.role!=='member'||!u.rid||!s||!s.code||!dbBase())return;try{const r=await fetch(dbBase()+'/s/'+s.code+'/u/'+u.rid+'.json');if(!r.ok)return;const v=await r.json();if(v===null){alert('تم إلغاء حسابك من قبل المدير');S.users=S.users.filter(x=>x.id!==u.id);await kvSet('users',S.users);syncStop();stopCam();S.user=null;S.sess=null;sessionStorage.removeItem('uid');render()}}catch(e){}}
+async function checkAccess(){const u=S.user,s=S.sess;if(!u||u.role!=='member'||!u.rid||!s||!s.code||!dbBase())return;try{const r=await fetch(dbBase()+'/s/'+s.code+'/u/'+u.rid+'.json');if(!r.ok&&r.status!==401)return;const v=r.status===401?null:await r.json();if(v===null){alert('تم إلغاء حسابك من قبل المدير');S.users=S.users.filter(x=>x.id!==u.id);await kvSet('users',S.users);syncStop();stopCam();S.user=null;S.sess=null;sessionStorage.removeItem('uid');render()}}catch(e){}}
+async function pollJoins(){
+ const s=S.sess;
+ if(!s||!s.code||!dbBase()||!S.user||S.user.role==='member'||SY.jb)return;
+ SY.jb=true;
+ try{
+  const jr=await fetch(dbBase()+'/s/'+s.code+'/join.json');
+  const j=await jr.json();
+  if(j){
+   const ur=await fetch(dbBase()+'/s/'+s.code+'/u.json');
+   const us=(await ur.json())||{};
+   for(const ju in j){
+    const r=j[ju];
+    if(r&&r.n&&typeof r.p==='string'){
+     for(const k in us){
+      const v=us[k];
+      if(v&&v.n&&v.n.trim().toLowerCase()===String(r.n).trim().toLowerCase()&&hash(v.s+r.p)===v.h){
+       try{
+        await fetch(dbBase()+'/s/'+s.code+'/members/'+ju+'.json',{method:'PUT',body:JSON.stringify({n:v.n,rid:k,r:v.r==='admin'?'admin':'member',at:Date.now()})});
+       }catch(e){}
+       break;
+      }
+     }
+    }
+    try{
+     await fetch(dbBase()+'/s/'+s.code+'/join/'+ju+'.json',{method:'DELETE'});
+    }catch(e){}
+   }
+  }
+ }catch(e){}
+ SY.jb=false;
+}
 async function shareSess(){const s=S.sess;if(!s)return;if(!dbBase()){alert('أدخل رابط قاعدة البيانات أولاً من تبويب «البيانات» > المزامنة');return}
  if(s.code){alert('الجلسة مشتركة أصلاً. الرمز: '+s.code);return}
- const code=genCode();try{const r=await fetch(dbBase()+'/s/'+code+'/meta.json',{method:'PUT',body:JSON.stringify({name:s.name,by:S.user.name,at:Date.now()})});if(!r.ok)throw 0}catch(e){alert('تعذر الاتصال بقاعدة البيانات. تأكد من الإنترنت والرابط.');return}
+ const code=genCode();await fbTok();try{const r=await fetch(dbBase()+'/s/'+code+'/meta.json',{method:'PUT',body:JSON.stringify(Object.assign({name:s.name,by:S.user.name,at:Date.now()},FB.uid?{owner:FB.uid}:{}))});if(!r.ok)throw 0}catch(e){alert('تعذر الاتصال بقاعدة البيانات. تأكد من الإنترنت والرابط.');return}
  s.code=code;s.remote={};await pubUser(code,S.user);await saveSess(true);syncStart();alert('تمت مشاركة الجلسة. افتح تبويب «الجلسات» لإنشاء حساب لصديقك وإرسال رابط الدعوة.');S.tab='sessions';render()}
 async function joinSess(){if(!dbBase()){alert('أدخل رابط قاعدة البيانات أولاً من تبويب «البيانات» > المزامنة');return}
  const code=(prompt('أدخل رمز الجلسة')||'').replace(/[\s-]/g,'').toUpperCase();if(!code)return;if(!/^[A-Z2-9]{16,40}$/.test(code)){alert('رمز الجلسة غير صحيح');return}let meta;try{const r=await fetch(dbBase()+'/s/'+code+'/meta.json');meta=await r.json()}catch(e){alert('تعذر الاتصال بالإنترنت');return}
